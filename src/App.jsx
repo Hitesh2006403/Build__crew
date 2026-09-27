@@ -11,6 +11,7 @@ import Hackathons from './views/Hackathons';
 import FindBuilders from './views/FindBuilders';
 import MyApplications from './views/MyApplications';
 import MyProjects from './views/MyProjects';
+import Invitations from './views/Invitations';
 import Profile from './views/Profile';
 import Auth from './views/Auth';
 import AdminDashboard from './views/AdminDashboard';
@@ -38,7 +39,8 @@ export default function App() {
   const [builders, setBuilders] = useState([]);
   const [applications, setApplications] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [pendingInvitations, setPendingInvitations] = useState([]);
+  const [receivedInvitations, setReceivedInvitations] = useState([]);
+  const [sentInvitations, setSentInvitations] = useState([]);
   const [hackathonSquads, setHackathonSquads] = useState([]);
   const [isBackendLoading, setIsBackendLoading] = useState(true);
   const [backendError, setBackendError] = useState(null);
@@ -131,7 +133,9 @@ export default function App() {
       }
       if (invsRes.status === 'fulfilled' && invsRes.value) {
         const received = Array.isArray(invsRes.value.received) ? invsRes.value.received : [];
-        setPendingInvitations(received.filter(inv => inv.status === 'pending'));
+        const sent = Array.isArray(invsRes.value.sent) ? invsRes.value.sent : [];
+        setReceivedInvitations(received);
+        setSentInvitations(sent);
       }
     } catch (err) {
       console.warn('Could not load user data from backend:', err);
@@ -255,6 +259,8 @@ export default function App() {
     setActiveView('discover-projects');
     setApplications([]);
     setNotifications([]);
+    setReceivedInvitations([]);
+    setSentInvitations([]);
     showToast('Signed out of BuildCrew session.');
   };
 
@@ -410,6 +416,17 @@ export default function App() {
     }
   };
 
+  const handleCancelInvitation = async (invitationId) => {
+    try {
+      await invitationsApi.respondInvitation(invitationId, 'cancelled');
+      showToast('Invitation cancelled.');
+      await fetchUserData();
+    } catch (err) {
+      console.error('Cancel invitation error:', err);
+      showToast(err.message || 'Failed to cancel invitation');
+    }
+  };
+
   const handleAddBuilder = async (newBuilder) => {
     try {
       const res = await usersApi.createBuilder(newBuilder);
@@ -532,6 +549,7 @@ export default function App() {
         onOpenPostProject={() => setIsPostProjectOpen(true)}
         currentUser={currentUser}
         onLogout={handleLogout}
+        pendingInvitationsCount={receivedInvitations.filter(i => i.status === 'pending').length}
       />
 
       {/* Main Content Area (Offset by Sidebar: pl-72) */}
@@ -549,12 +567,10 @@ export default function App() {
           }}
           notificationCount={unreadCount}
           notifications={notifications}
-          pendingInvitations={pendingInvitations}
-          onAcceptInvitation={handleAcceptInvitation}
-          onRejectInvitation={handleRejectInvitation}
           onMarkRead={handleMarkNotificationRead}
           onMarkAllRead={handleMarkAllNotificationsRead}
           onNavigateProfile={() => handleNavigateView('profile')}
+          onNavigateInvitations={() => handleNavigateView('invitations')}
           currentUser={currentUser}
           onLogout={handleLogout}
           onOpenAdminDashboard={() => handleNavigateView('admin-dashboard')}
@@ -619,7 +635,7 @@ export default function App() {
               builders={builders}
               projects={projects}
               hackathonSquads={hackathonSquads}
-              pendingInvitations={pendingInvitations}
+              sentInvitations={sentInvitations}
               onInvite={handleInviteBuilder}
               onViewProfile={handleViewProfile}
               showToast={showToast}
@@ -640,6 +656,18 @@ export default function App() {
             <MyApplications
               applications={applications}
               onSelectProjectById={handleSelectProjectById}
+            />
+          )}
+
+          {activeView === 'invitations' && (
+            <Invitations
+              receivedInvitations={receivedInvitations}
+              sentInvitations={sentInvitations}
+              onAcceptInvitation={handleAcceptInvitation}
+              onRejectInvitation={handleRejectInvitation}
+              onCancelInvitation={handleCancelInvitation}
+              onViewProfile={handleViewProfile}
+              onSelectProject={handleSelectProject}
             />
           )}
 
@@ -675,76 +703,8 @@ export default function App() {
                   </p>
                 </div>
 
-                {/* Pending Squad Invitations (Requirement 4 & 5) */}
-                {pendingInvitations && pendingInvitations.length > 0 && (
-                  <div className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm border border-secondary/25 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-secondary text-xl">mail</span>
-                        <h2 className="font-headline-sm text-lg font-bold text-on-surface">
-                          Pending Squad Invitations ({pendingInvitations.length})
-                        </h2>
-                      </div>
-                      <span className="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-xs font-bold">
-                        Action Required
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {pendingInvitations.map((inv) => {
-                        const senderName = inv.sender?.name || 'A teammate';
-                        const teamTitle = inv.teamName || inv.project?.title || inv.hackathonTeam?.teamName || 'the squad';
-                        return (
-                          <div key={inv._id} className="p-4 rounded-xl bg-surface-container-low border border-surface-container-high/60 flex flex-col justify-between space-y-3">
-                            <div>
-                              <div className="flex items-center justify-between text-xs text-secondary font-bold uppercase tracking-wider mb-1">
-                                <span>Invitation</span>
-                                <span className="text-outline font-normal">
-                                  {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : 'Recent'}
-                                </span>
-                              </div>
-                              <h3 className="font-title-md text-base font-bold text-on-surface">
-                                {senderName} invited you to join <span className="text-secondary">[{teamTitle}]</span>
-                              </h3>
-                              {inv.role && (
-                                <p className="text-xs text-on-surface-variant mt-1">
-                                  Invited Position: <strong className="text-on-surface">{inv.role}</strong>
-                                </p>
-                              )}
-                              {inv.message && (
-                                <p className="text-xs text-on-surface-variant italic mt-1 bg-surface-container-lowest/60 p-2 rounded-lg">
-                                  "{inv.message}"
-                                </p>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-2 pt-2 border-t border-surface-container-high/60">
-                              <button
-                                type="button"
-                                onClick={() => handleAcceptInvitation(inv._id)}
-                                className="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-surface-tint text-on-primary font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-[0.98]"
-                              >
-                                <span className="material-symbols-outlined text-base">check</span>
-                                <span>Accept Invitation</span>
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleRejectInvitation(inv._id)}
-                                className="flex-1 py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-xs transition-all cursor-pointer flex items-center justify-center gap-1"
-                              >
-                                <span className="material-symbols-outlined text-base">close</span>
-                                <span>Reject</span>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
                 {/* Squad Rosters: Projects & Hackathons */}
-                {!hasAnyTeams && (!pendingInvitations || pendingInvitations.length === 0) ? (
+                {!hasAnyTeams ? (
                   <div className="bg-surface-container-lowest rounded-2xl p-space-xl text-center text-on-surface-variant border border-surface-container-high/40">
                     <span className="material-symbols-outlined text-4xl text-outline mb-2">diversity_3</span>
                     <p className="font-body-lg text-body-lg text-on-surface font-semibold">No active squads joined yet</p>
@@ -822,6 +782,7 @@ export default function App() {
             <Profile
               currentUser={currentUser}
               targetUserId={viewingProfileUserId}
+              sentInvitations={sentInvitations}
               onBack={() => {
                 setViewingProfileUserId(null);
                 setActiveView('find-builders');

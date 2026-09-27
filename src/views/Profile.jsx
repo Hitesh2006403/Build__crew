@@ -14,6 +14,7 @@ function cleanText(text) {
 export default function Profile({ 
   currentUser, 
   targetUserId, 
+  sentInvitations = [],
   onBack, 
   onInviteBuilder, 
   onUpdateUser, 
@@ -233,14 +234,41 @@ export default function Profile({
 
           {/* Action button if viewing another builder */}
           {isViewingOther && onInviteBuilder && (
-            <button
-              type="button"
-              onClick={() => onInviteBuilder(activeUser)}
-              className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm shadow-md hover:bg-surface-tint active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2 self-stretch sm:self-auto justify-center font-semibold"
-            >
-              <span className="material-symbols-outlined text-base">person_add</span>
-              <span>Invite to Team</span>
-            </button>
+            (() => {
+              const existing = sentInvitations?.find(inv => {
+                const rId = inv.receiver?._id || inv.receiver;
+                return String(rId) === String(activeUser._id);
+              });
+
+              if (existing && existing.status === 'pending') {
+                return (
+                  <span className="px-5 py-2.5 rounded-xl bg-secondary-fixed text-on-secondary-fixed font-title-sm text-title-sm flex items-center gap-2 self-stretch sm:self-auto justify-center font-bold shadow-xs select-none">
+                    <span className="material-symbols-outlined text-base">schedule</span>
+                    <span>Invitation Sent</span>
+                  </span>
+                );
+              }
+
+              if (existing && existing.status === 'accepted') {
+                return (
+                  <span className="px-5 py-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-title-sm text-title-sm flex items-center gap-2 self-stretch sm:self-auto justify-center font-bold select-none">
+                    <span className="material-symbols-outlined text-base">check_circle</span>
+                    <span>In Team</span>
+                  </span>
+                );
+              }
+
+              return (
+                <button
+                  type="button"
+                  onClick={() => onInviteBuilder(activeUser)}
+                  className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm shadow-md hover:bg-surface-tint active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2 self-stretch sm:self-auto justify-center font-semibold"
+                >
+                  <span className="material-symbols-outlined text-base">person_add</span>
+                  <span>Invite to Team</span>
+                </button>
+              );
+            })()
           )}
         </div>
 

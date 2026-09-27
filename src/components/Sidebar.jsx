@@ -3,7 +3,8 @@ export default function Sidebar({
   setActiveView, 
   onOpenPostProject, 
   currentUser, 
-  onLogout 
+  onLogout,
+  pendingInvitationsCount = 0
 }) {
   const isAdmin = currentUser?.role === 'admin';
 
@@ -16,6 +17,7 @@ export default function Sidebar({
   const myWorkNav = [
     { id: 'my-projects', label: 'My Projects', icon: 'rocket_launch' },
     { id: 'my-applications', label: 'My Applications', icon: 'assignment' },
+    { id: 'invitations', label: 'Invitations', icon: 'mail', badge: pendingInvitationsCount },
     { id: 'my-teams', label: 'My Teams', icon: 'diversity_3' },
   ];
 
@@ -125,14 +127,21 @@ export default function Sidebar({
                     key={item.id}
                     type="button"
                     onClick={() => handleNavClick(item.id)}
-                    className={`w-full flex items-center gap-space-sm px-space-md py-2 rounded-xl transition-all font-title-sm text-title-sm text-left ${
+                    className={`w-full flex items-center justify-between px-space-md py-2 rounded-xl transition-all font-title-sm text-title-sm text-left ${
                       isActive
                         ? 'bg-surface-container text-on-surface font-semibold shadow-sm'
                         : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                     }`}
                   >
-                    <span className="material-symbols-outlined text-xl">{item.icon}</span>
-                    <span>{item.label}</span>
+                    <div className="flex items-center gap-space-sm">
+                      <span className="material-symbols-outlined text-xl">{item.icon}</span>
+                      <span>{item.label}</span>
+                    </div>
+                    {item.badge > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-bold text-xs">
+                        {item.badge}
+                      </span>
+                    )}
                   </button>
                 );
               })}

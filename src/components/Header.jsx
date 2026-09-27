@@ -7,12 +7,10 @@ export default function Header({
   onSearchFocus,
   notificationCount = 0,
   notifications = [],
-  pendingInvitations = [],
-  onAcceptInvitation,
-  onRejectInvitation,
   onMarkRead,
   onMarkAllRead,
   onNavigateProfile,
+  onNavigateInvitations,
   currentUser,
   onLogout,
   onOpenAdminDashboard
@@ -131,7 +129,7 @@ export default function Header({
           )}
         </div>
 
-        {/* Notifications Button */}
+          {/* Notifications Button */}
         <div className="relative">
           <button 
             aria-label="Notifications" 
@@ -139,7 +137,7 @@ export default function Header({
             className={`relative w-9 h-9 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer ${showNotifications ? 'bg-surface-container text-secondary' : ''}`}
           >
             <span className="material-symbols-outlined text-xl">notifications</span>
-            {(notificationCount > 0 || (pendingInvitations && pendingInvitations.length > 0)) && (
+            {notificationCount > 0 && (
               <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-secondary"></span>
             )}
           </button>
@@ -150,7 +148,7 @@ export default function Header({
                 <span className="font-title-sm text-title-sm font-bold text-on-surface">Notifications</span>
                 <div className="flex items-center gap-2">
                   <span className="font-label-sm text-label-sm text-secondary font-semibold">
-                    {notificationCount + (pendingInvitations?.length || 0)} new
+                    {notificationCount} new
                   </span>
                   {notificationCount > 0 && onMarkAllRead && (
                     <button
@@ -164,59 +162,9 @@ export default function Header({
                 </div>
               </div>
 
-              {/* Pending Team Invitations (Requirement 4 & 5: Accept / Reject) */}
-              {pendingInvitations && pendingInvitations.length > 0 && (
-                <div className="space-y-2.5 mb-3.5 pb-3 border-b border-surface-container-low">
-                  <div className="flex items-center justify-between text-xs font-bold text-secondary uppercase tracking-wider">
-                    <div className="flex items-center gap-1.5">
-                      <span className="material-symbols-outlined text-sm">mail</span>
-                      <span>Squad Invitations</span>
-                    </div>
-                    <span className="px-2 py-0.2 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[10px] font-extrabold">
-                      {pendingInvitations.length} pending
-                    </span>
-                  </div>
-
-                  {pendingInvitations.map((inv) => {
-                    const senderName = inv.sender?.name || 'A teammate';
-                    const teamTitle = inv.teamName || inv.project?.title || inv.hackathonTeam?.teamName || 'the squad';
-                    return (
-                      <div key={inv._id} className="p-3 rounded-xl bg-surface-container-low border border-secondary/25 space-y-2">
-                        <div className="text-xs">
-                          <span className="font-bold text-on-surface">{senderName}</span>
-                          <span className="text-on-surface-variant"> invited you to join </span>
-                          <span className="font-bold text-secondary">[{teamTitle}]</span>
-                          {inv.role && (
-                            <span className="block text-[11px] text-on-surface-variant mt-0.5">Role: {inv.role}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => onAcceptInvitation && onAcceptInvitation(inv._id)}
-                            className="flex-1 py-1.5 px-3 rounded-lg bg-primary hover:bg-surface-tint text-on-primary font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-[0.98]"
-                          >
-                            <span className="material-symbols-outlined text-sm">check</span>
-                            <span>Accept</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onRejectInvitation && onRejectInvitation(inv._id)}
-                            className="flex-1 py-1.5 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-xs transition-all cursor-pointer flex items-center justify-center gap-1"
-                          >
-                            <span className="material-symbols-outlined text-sm">close</span>
-                            <span>Reject</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
               {/* Standard Platform Notifications from MongoDB */}
               <div className="space-y-2.5 text-body-sm">
-                {notifications.length === 0 && (!pendingInvitations || pendingInvitations.length === 0) ? (
+                {notifications.length === 0 ? (
                   <div className="py-6 text-center text-on-surface-variant text-xs">
                     <span className="material-symbols-outlined text-2xl text-outline mb-1">notifications_none</span>
                     <p>No new notifications</p>
@@ -225,7 +173,13 @@ export default function Header({
                   notifications.map((n, idx) => (
                     <div
                       key={n._id || idx}
-                      onClick={() => onMarkRead && onMarkRead(n._id)}
+                      onClick={() => {
+                        if (onMarkRead) onMarkRead(n._id);
+                        if (n.type === 'invitation_received' && onNavigateInvitations) {
+                          setShowNotifications(false);
+                          onNavigateInvitations();
+                        }
+                      }}
                       className={`p-2.5 rounded-xl cursor-pointer transition-colors ${
                         n.read ? 'bg-surface-container-low/60 opacity-70' : 'bg-surface-container-low hover:bg-surface-container'
                       }`}

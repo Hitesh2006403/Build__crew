@@ -4,7 +4,7 @@ export default function FindBuilders({
   builders = [], 
   projects = [], 
   hackathonSquads = [], 
-  pendingInvitations = [], 
+  sentInvitations = [], 
   onInvite, 
   onViewProfile, 
   showToast, 
@@ -60,6 +60,14 @@ function cleanText(text) {
   return trimmed;
 }
 
+  const getExistingInviteForBuilder = (builderId) => {
+    if (!sentInvitations || sentInvitations.length === 0) return null;
+    return sentInvitations.find((inv) => {
+      const rId = inv.receiver?._id || inv.receiver;
+      return String(rId) === String(builderId);
+    });
+  };
+
   const handleOpenInviteModal = (builder) => {
     if (!currentUser) {
       if (showToast) showToast('Please sign in to invite teammates.');
@@ -67,6 +75,11 @@ function cleanText(text) {
     }
     if (builder._id === currentUser._id) {
       if (showToast) showToast('You cannot invite yourself to a team.');
+      return;
+    }
+    const existing = getExistingInviteForBuilder(builder._id || builder.id);
+    if (existing && existing.status === 'pending') {
+      if (showToast) showToast(`An invitation has already been sent to ${builder.name}.`);
       return;
     }
     if (myAvailableSquads.length === 0) {
@@ -338,14 +351,35 @@ function cleanText(text) {
                   </button>
 
                   {!isSelf && (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenInviteModal(b)}
-                      className="py-2 px-4 rounded-xl font-title-sm text-title-sm bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all flex items-center gap-1 cursor-pointer shadow-xs"
-                    >
-                      <span className="material-symbols-outlined text-base">person_add</span>
-                      <span>Invite to Team</span>
-                    </button>
+                    (() => {
+                      const existing = getExistingInviteForBuilder(b._id || b.id);
+                      if (existing && existing.status === 'pending') {
+                        return (
+                          <span className="py-2 px-3.5 rounded-xl font-title-sm text-xs bg-secondary-fixed text-on-secondary-fixed font-bold flex items-center gap-1 select-none shadow-xs">
+                            <span className="material-symbols-outlined text-sm">schedule</span>
+                            <span>Invitation Sent</span>
+                          </span>
+                        );
+                      }
+                      if (existing && existing.status === 'accepted') {
+                        return (
+                          <span className="py-2 px-3.5 rounded-xl font-title-sm text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1 select-none">
+                            <span className="material-symbols-outlined text-sm">check_circle</span>
+                            <span>In Team</span>
+                          </span>
+                        );
+                      }
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenInviteModal(b)}
+                          className="py-2 px-4 rounded-xl font-title-sm text-title-sm bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                        >
+                          <span className="material-symbols-outlined text-base">person_add</span>
+                          <span>Invite to Team</span>
+                        </button>
+                      );
+                    })()
                   )}
                 </div>
               </div>

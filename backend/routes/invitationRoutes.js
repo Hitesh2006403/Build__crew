@@ -231,8 +231,8 @@ router.patch("/:id", authenticateUser, async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    if (!["accepted", "rejected"].includes(status)) {
-      return res.status(400).json({ error: "Status must be 'accepted' or 'rejected'." });
+    if (!["accepted", "rejected", "cancelled"].includes(status)) {
+      return res.status(400).json({ error: "Status must be 'accepted', 'rejected', or 'cancelled'." });
     }
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -248,9 +248,16 @@ router.patch("/:id", authenticateUser, async (req, res) => {
       return res.status(404).json({ error: "Invitation not found." });
     }
 
-    // Rule: Only the intended receiver can accept/reject the invitation
-    if (invitation.receiver.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ error: "Forbidden: Only the invited receiver can respond to this invitation." });
+    // Authorization rule:
+    // Sender can cancel their own invitation; receiver can accept or reject
+    if (status === "cancelled") {
+      if (invitation.sender.toString() !== req.user._id.toString() && req.user.role !== "admin") {
+        return res.status(403).json({ error: "Forbidden: Only the sender can cancel this invitation." });
+      }
+    } else {
+      if (invitation.receiver.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ error: "Forbidden: Only the invited receiver can respond to this invitation." });
+      }
     }
 
     // Prevent re-processing already decided invitations
