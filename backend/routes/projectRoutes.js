@@ -264,4 +264,41 @@ router.delete("/:id", authenticateUser, async (req, res) => {
   }
 });
 
+// PATCH /api/projects/:id/clear-team-full - Clear Team Full status (Admin only)
+router.patch("/:id/clear-team-full", authenticateUser, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden: Admin access required." });
+    }
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid project ID." });
+    }
+    const project = await Project.findById(id);
+    if (!project) {
+      return res.status(404).json({ error: "Project not found." });
+    }
+
+    const currentMemberCount = project.members?.length || project.filledCount || 1;
+    // Increase capacity by at least 1 beyond current member count so project is open again
+    project.totalCapacity = Math.max(Number(project.totalCapacity) || 4, currentMemberCount + 1);
+    project.status = "recruiting";
+    project.recruitingBadge = "Recruiting Roles";
+    await project.save();
+
+    const populated = await Project.findById(id)
+      .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam");
+
+    return res.json({
+      success: true,
+      message: `Team Full status cleared for "${project.title}". Capacity increased to ${project.totalCapacity}.`,
+      project: populated,
+    });
+  } catch (err) {
+    console.error("Clear team full error:", err);
+    return res.status(500).json({ error: "Failed to clear team full status.", details: err.message });
+  }
+});
+
 export default router;

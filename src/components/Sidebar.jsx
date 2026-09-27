@@ -49,7 +49,7 @@ export default function Sidebar({
               BuildCrew
             </span>
             <span className="font-label-sm text-label-sm text-on-surface-variant">
-              Campus Collab Engine
+              Student Collaboration Platform
             </span>
           </div>
         </div>

@@ -361,6 +361,14 @@ export default function App() {
     }
   };
 
+  const handleUpdateProject = (updatedProj) => {
+    if (!updatedProj?._id) return;
+    setProjects(prev => prev.map(p => (p._id === updatedProj._id ? updatedProj : p)));
+    if (selectedProject?._id === updatedProj._id) {
+      setSelectedProject(updatedProj);
+    }
+  };
+
   const handleInviteBuilder = async (inviteData) => {
     try {
       let payload;
@@ -432,11 +440,11 @@ export default function App() {
       const res = await usersApi.createBuilder(newBuilder);
       const savedBuilder = res.builder || newBuilder;
       setBuilders(prev => [savedBuilder, ...prev]);
-      showToast(`Worker / Builder "${savedBuilder.name}" added successfully in MongoDB!`);
+      showToast(`Student "${savedBuilder.name}" added successfully!`);
     } catch (err) {
       console.error('Failed to create builder:', err);
       setBuilders(prev => [newBuilder, ...prev]);
-      showToast(`Worker / Builder "${newBuilder.name}" added!`);
+      showToast(`Student "${newBuilder.name}" added!`);
     }
   };
 
@@ -521,7 +529,9 @@ export default function App() {
     );
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Filter out any invitation notices from general notifications dropdown (invitations belong exclusively to Invitations section)
+  const generalNotifications = notifications.filter(n => n.type !== 'invitation_received');
+  const unreadCount = generalNotifications.filter(n => !n.read).length;
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col font-body-md antialiased relative">
@@ -566,7 +576,7 @@ export default function App() {
             }
           }}
           notificationCount={unreadCount}
-          notifications={notifications}
+          notifications={generalNotifications}
           onMarkRead={handleMarkNotificationRead}
           onMarkAllRead={handleMarkAllNotificationsRead}
           onNavigateProfile={() => handleNavigateView('profile')}
@@ -584,8 +594,11 @@ export default function App() {
               <AdminDashboard
                 currentUser={currentUser}
                 hackathons={hackathons}
+                projects={projects}
                 onUpdateHackathons={handleUpdateHackathons}
                 onRefreshHackathons={fetchHackathons}
+                onRefreshProjects={fetchProjects}
+                onUpdateProject={handleUpdateProject}
                 showToast={showToast}
                 onNavigate={setActiveView}
               />
@@ -668,6 +681,7 @@ export default function App() {
               onCancelInvitation={handleCancelInvitation}
               onViewProfile={handleViewProfile}
               onSelectProject={handleSelectProject}
+              currentUser={currentUser}
             />
           )}
 
@@ -693,13 +707,13 @@ export default function App() {
                 <div className="flex flex-col max-w-3xl">
                   <div className="flex items-center gap-space-xs text-secondary font-label-md text-label-md uppercase tracking-wider mb-1">
                     <span className="material-symbols-outlined text-base">diversity_3</span>
-                    <span>Active Squad Pods</span>
+                    <span>Your Teams</span>
                   </div>
                   <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
-                    My Teams &amp; Squads
+                    My Teams
                   </h1>
                   <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-                    Collaborate in real-time with verified squad members preparing for upcoming hackathon milestones.
+                    Teams and projects you are currently collaborating in.
                   </p>
                 </div>
 
@@ -707,71 +721,91 @@ export default function App() {
                 {!hasAnyTeams ? (
                   <div className="bg-surface-container-lowest rounded-2xl p-space-xl text-center text-on-surface-variant border border-surface-container-high/40">
                     <span className="material-symbols-outlined text-4xl text-outline mb-2">diversity_3</span>
-                    <p className="font-body-lg text-body-lg text-on-surface font-semibold">No active squads joined yet</p>
-                    <p className="font-body-sm text-body-sm mt-1">Explore Discover Projects or Squad Up in Hackathons to join a team.</p>
+                    <p className="font-body-lg text-body-lg text-on-surface font-semibold">You haven't joined any teams yet</p>
+                    <p className="font-body-sm text-body-sm mt-1">Explore Discover Projects or accept team invitations to join a team.</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
                     {/* Project Teams */}
-                    {myProjectTeams.map((p, idx) => (
-                      <div key={p._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
-                        <div className="flex items-center justify-between">
-                          <span className="px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
-                            {p.categoryBadge || 'Project Squad'}
-                          </span>
-                          <span className="font-label-sm text-label-sm text-secondary font-semibold">
-                            {p.filledCount || (p.members?.length || 1)}/{p.totalCapacity || 4} Members
-                          </span>
+                    {myProjectTeams.map((p, idx) => {
+                      const isOwner = currentUser && ((p.createdBy?._id || p.createdBy) === currentUser._id);
+                      return (
+                        <div key={p._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-1 rounded-full bg-surface-container text-secondary font-label-sm text-label-sm font-semibold">
+                                {p.categoryBadge || p.category || 'Project'}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                isOwner ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface-variant'
+                              }`}>
+                                {isOwner ? 'Creator' : 'Member'}
+                              </span>
+                            </div>
+                            <span className="font-label-sm text-label-sm text-secondary font-semibold">
+                              {p.filledCount || (p.members?.length || 1)}/{p.totalCapacity || 4} Members
+                            </span>
+                          </div>
+                          <div>
+                            <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
+                              {p.title}
+                            </h3>
+                            <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
+                              {p.tagline || p.whatAreYouBuilding || p.problemBeingSolved || p.fullDescription}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
+                            <span className="text-on-surface font-medium">Created By</span>
+                            <span className="text-secondary font-semibold">{p.lead?.name || p.createdBy?.name || 'Project Creator'}</span>
+                          </div>
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-high/60">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectProject(p)}
+                              className="py-2 px-4 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm hover:bg-surface-tint transition-all cursor-pointer shadow-xs"
+                            >
+                              View Project &amp; Team
+                            </button>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-                            {p.title}
-                          </h3>
-                          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
-                            {p.tagline || p.fullDescription}
-                          </p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
-                          <span className="text-on-surface font-medium">Squad Lead</span>
-                          <span className="text-secondary font-semibold">{p.lead?.name || 'Lead Architect'}</span>
-                        </div>
-                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-high/60">
-                          <button
-                            type="button"
-                            onClick={() => handleSelectProject(p)}
-                            className="py-2 px-4 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm hover:bg-surface-tint transition-all cursor-pointer shadow-xs"
-                          >
-                            Open Squad Workspace
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     {/* Hackathon Teams */}
-                    {myHackTeams.map((h, idx) => (
-                      <div key={h._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
-                        <div className="flex items-center justify-between">
-                          <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 font-label-sm text-label-sm font-semibold">
-                            {h.hackathonTitle || 'Hackathon Squad'}
-                          </span>
-                          <span className="font-label-sm text-label-sm text-secondary font-semibold">
-                            {h.filledCount || (h.members?.length || 1)}/{h.totalCapacity || 4} Members
-                          </span>
+                    {myHackTeams.map((h, idx) => {
+                      const isOwner = currentUser && ((h.createdBy?._id || h.createdBy) === currentUser._id);
+                      return (
+                        <div key={h._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 font-label-sm text-label-sm font-semibold">
+                                {h.hackathonTitle || 'Hackathon Team'}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                isOwner ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface-variant'
+                              }`}>
+                                {isOwner ? 'Creator' : 'Member'}
+                              </span>
+                            </div>
+                            <span className="font-label-sm text-label-sm text-secondary font-semibold">
+                              {h.filledCount || (h.members?.length || 1)}/{h.totalCapacity || 4} Members
+                            </span>
+                          </div>
+                          <div>
+                            <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
+                              {h.teamName || h.title}
+                            </h3>
+                            <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
+                              {h.tagline || h.description || `Competing in ${h.hackathonTitle || 'Hackathon'}`}
+                            </p>
+                          </div>
+                          <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
+                            <span className="text-on-surface font-medium">Team Lead</span>
+                            <span className="text-secondary font-semibold">{h.lead?.name || h.createdBy?.name || 'Team Lead'}</span>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-                            {h.teamName || h.title}
-                          </h3>
-                          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
-                            {h.tagline || h.description || `Competing in ${h.hackathonTitle || 'Hackathon'}`}
-                          </p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
-                          <span className="text-on-surface font-medium">Squad Lead</span>
-                          <span className="text-secondary font-semibold">{h.lead?.name || 'Team Lead'}</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

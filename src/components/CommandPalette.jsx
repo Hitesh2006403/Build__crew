@@ -36,16 +36,21 @@ export default function CommandPalette({
 
   if (!isOpen) return null;
 
-  const filteredProjects = projects.filter(p => 
-    p.title.toLowerCase().includes(query.toLowerCase()) ||
-    p.tagline.toLowerCase().includes(query.toLowerCase()) ||
-    p.techStack.some(t => t.toLowerCase().includes(query.toLowerCase()))
-  );
+  const filteredProjects = projects.filter(p => {
+    const q = query.toLowerCase();
+    const title = (p.title || '').toLowerCase();
+    const desc = (p.tagline || p.whatAreYouBuilding || p.problemBeingSolved || p.fullDescription || '').toLowerCase();
+    const stackMatch = Array.isArray(p.techStack) && p.techStack.some(t => t.toLowerCase().includes(q));
+    const cat = (p.category || p.categoryBadge || '').toLowerCase();
+    return title.includes(q) || desc.includes(q) || stackMatch || cat.includes(q);
+  });
 
-  const filteredHackathons = hackathons.filter(h => 
-    h.title.toLowerCase().includes(query.toLowerCase()) ||
-    h.location.toLowerCase().includes(query.toLowerCase())
-  );
+  const filteredHackathons = hackathons.filter(h => {
+    const q = query.toLowerCase();
+    const title = (h.title || '').toLowerCase();
+    const loc = (h.location || '').toLowerCase();
+    return title.includes(q) || loc.includes(q);
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-primary-container/40 backdrop-blur-sm animate-modal">

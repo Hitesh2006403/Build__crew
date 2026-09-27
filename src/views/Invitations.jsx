@@ -33,10 +33,33 @@ export default function Invitations({
   onCancelInvitation,
   onViewProfile,
   onSelectProject,
+  currentUser,
   isLoading = false
 }) {
   const [activeTab, setActiveTab] = useState('received'); // 'received' | 'sent'
   const [processingId, setProcessingId] = useState(null);
+  const [contactMember, setContactMember] = useState(null);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+
+  const handleOpenContact = (person) => {
+    if (!person) return;
+    setContactMember({
+      name: person.name || 'Teammate',
+      avatar: person.avatar || person.profileImage || '',
+      college: cleanText(person.college || person.university),
+      email: person.email || '',
+      github: person.github || '',
+      linkedin: person.linkedin || '',
+      showEmailToTeam: person.showEmailToTeam !== false,
+      userId: person._id,
+    });
+    setIsContactModalOpen(true);
+  };
+
+  const handleCloseContact = () => {
+    setContactMember(null);
+    setIsContactModalOpen(false);
+  };
 
   const handleAccept = async (id) => {
     if (processingId || !onAcceptInvitation) return;
@@ -110,14 +133,14 @@ export default function Invitations({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-space-md">
         <div className="flex flex-col">
           <div className="flex items-center gap-space-xs text-secondary font-label-md text-label-md uppercase tracking-wider mb-1">
-            <span className="material-symbols-outlined text-base">diversity_3</span>
-            <span>Squad Collaboration</span>
+            <span className="material-symbols-outlined text-base">mail</span>
+            <span>Team Invitations</span>
           </div>
           <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
             Invitations
           </h1>
           <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-            Manage your incoming team invitations and monitor the status of squads you've invited builders to.
+            Manage incoming team invitations and track invitations you've sent to other students.
           </p>
         </div>
       </div>
@@ -297,6 +320,17 @@ export default function Invitations({
                         </>
                       ) : null}
 
+                      {inv.status === 'accepted' && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenContact(sender)}
+                          className="py-2 px-3 rounded-xl bg-secondary/10 hover:bg-secondary/20 text-secondary font-semibold text-xs transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-sm">chat</span>
+                          <span>Contact</span>
+                        </button>
+                      )}
+
                       {sender._id && onViewProfile && (
                         <button
                           type="button"
@@ -425,6 +459,17 @@ export default function Invitations({
                         </button>
                       )}
 
+                      {inv.status === 'accepted' && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenContact(receiver)}
+                          className="py-1.5 px-3 rounded-xl bg-secondary/10 hover:bg-secondary/20 text-secondary font-semibold text-xs transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-sm">chat</span>
+                          <span>Contact</span>
+                        </button>
+                      )}
+
                       {receiver._id && onViewProfile && (
                         <button
                           type="button"
@@ -442,6 +487,144 @@ export default function Invitations({
           )
         )}
       </div>
+
+      {/* Real Contact Information Modal */}
+      {isContactModalOpen && contactMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary-container/40 backdrop-blur-sm animate-modal">
+          <div className="fixed inset-0" onClick={handleCloseContact} />
+          <div className="relative w-full max-w-md bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high overflow-hidden z-10 p-space-lg">
+            <div className="flex items-start justify-between mb-space-md">
+              <div className="flex items-center gap-3">
+                <div className="relative shrink-0">
+                  {contactMember.avatar ? (
+                    <img
+                      src={contactMember.avatar}
+                      alt=""
+                      className="w-12 h-12 rounded-full object-cover shadow-sm shrink-0"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full bg-secondary/15 text-secondary font-bold text-lg flex items-center justify-center shrink-0">
+                      {(contactMember.name || 'M').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-title-md text-title-md font-bold text-on-surface">
+                    {contactMember.name}
+                  </h3>
+                  {contactMember.college && (
+                    <p className="font-body-sm text-xs text-on-surface-variant">
+                      {contactMember.college}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={handleCloseContact}
+                className="p-1.5 rounded-xl hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-3.5 pt-1">
+              {/* Email (only if allowed by privacy setting or viewer is self/admin) */}
+              {contactMember.email && (contactMember.showEmailToTeam || String(contactMember.userId) === String(currentUser?._id) || currentUser?.role === 'admin') ? (
+                <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high/50 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="font-label-sm text-[11px] text-outline uppercase tracking-wider block">
+                      Email Address
+                    </span>
+                    <span className="font-body-sm text-sm text-on-surface font-medium truncate block">
+                      {contactMember.email}
+                    </span>
+                  </div>
+                  <a
+                    href={`mailto:${contactMember.email}`}
+                    className="px-3.5 py-1.5 rounded-xl bg-primary text-on-primary font-title-sm text-xs font-semibold hover:bg-surface-tint transition-all shrink-0 inline-flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">mail</span>
+                    <span>Send Email</span>
+                  </a>
+                </div>
+              ) : contactMember.email && !contactMember.showEmailToTeam ? (
+                <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high/50 text-xs text-on-surface-variant">
+                  <span className="material-symbols-outlined text-sm align-middle mr-1">lock</span>
+                  Email hidden by member privacy settings.
+                </div>
+              ) : null}
+
+              {/* GitHub */}
+              {contactMember.github && cleanText(contactMember.github) && (
+                <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high/50 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="font-label-sm text-[11px] text-outline uppercase tracking-wider block">
+                      GitHub
+                    </span>
+                    <span className="font-body-sm text-sm text-on-surface font-medium truncate block">
+                      {contactMember.github}
+                    </span>
+                  </div>
+                  <a
+                    href={contactMember.github.startsWith('http') ? contactMember.github : `https://${contactMember.github}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3.5 py-1.5 rounded-xl bg-surface-container-highest text-on-surface font-title-sm text-xs font-semibold hover:bg-surface-container transition-all shrink-0 inline-flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">code</span>
+                    <span>GitHub</span>
+                    <span className="material-symbols-outlined text-xs">arrow_outward</span>
+                  </a>
+                </div>
+              )}
+
+              {/* LinkedIn */}
+              {contactMember.linkedin && cleanText(contactMember.linkedin) && (
+                <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high/50 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="font-label-sm text-[11px] text-outline uppercase tracking-wider block">
+                      LinkedIn
+                    </span>
+                    <span className="font-body-sm text-sm text-on-surface font-medium truncate block">
+                      {contactMember.linkedin}
+                    </span>
+                  </div>
+                  <a
+                    href={contactMember.linkedin.startsWith('http') ? contactMember.linkedin : `https://${contactMember.linkedin}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3.5 py-1.5 rounded-xl bg-surface-container-highest text-on-surface font-title-sm text-xs font-semibold hover:bg-surface-container transition-all shrink-0 inline-flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">link</span>
+                    <span>LinkedIn</span>
+                    <span className="material-symbols-outlined text-xs">arrow_outward</span>
+                  </a>
+                </div>
+              )}
+
+              {/* If no contact info stored */}
+              {(!contactMember.email || (!contactMember.showEmailToTeam && String(contactMember.userId) !== String(currentUser?._id) && currentUser?.role !== 'admin')) &&
+               (!contactMember.github || !cleanText(contactMember.github)) &&
+               (!contactMember.linkedin || !cleanText(contactMember.linkedin)) && (
+                <div className="py-6 text-center text-on-surface-variant font-body-sm text-sm bg-surface-container-low rounded-xl">
+                  No public contact information shared by this member.
+                </div>
+              )}
+            </div>
+
+            <div className="pt-space-md mt-space-md border-t border-surface-container-high/40 flex justify-end">
+              <button
+                type="button"
+                onClick={handleCloseContact}
+                className="px-4 py-2 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-title-sm text-title-sm transition-all cursor-pointer font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

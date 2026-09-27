@@ -16,7 +16,6 @@ export default function Header({
   onOpenAdminDashboard
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showActivityFeed, setShowActivityFeed] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
 
   const handleInputChange = (e) => {
@@ -57,12 +56,12 @@ export default function Header({
           ) : null}
         </div>
 
-        <div className="hidden lg:flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-md text-label-md select-none">
-          <span className="material-symbols-outlined text-secondary text-base leading-none">school</span>
-          <span>{currentUser?.university || currentUser?.college || 'Campus Member'}</span>
-          <span className="text-outline-variant">•</span>
-          <span className="text-on-surface-variant font-medium">Fall 2026</span>
-        </div>
+        {(currentUser?.university || currentUser?.college) && (
+          <div className="hidden lg:flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-md text-label-md select-none">
+            <span className="material-symbols-outlined text-secondary text-base leading-none">school</span>
+            <span>{currentUser.university || currentUser.college}</span>
+          </div>
+        )}
       </div>
 
       {/* Right: Actions & Profile */}
@@ -85,49 +84,6 @@ export default function Header({
             </button>
           )
         )}
-
-        {/* Activity Feed Button */}
-        <div className="relative">
-          <button 
-            aria-label="Activity Feed" 
-            onClick={() => setShowActivityFeed(!showActivityFeed)}
-            className={`w-9 h-9 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer ${showActivityFeed ? 'bg-surface-container text-secondary' : ''}`}
-          >
-            <span className="material-symbols-outlined text-xl">campaign</span>
-          </button>
-
-          {showActivityFeed && (
-            <div className="absolute right-0 mt-2 w-80 bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-high p-space-md z-50 animate-modal">
-              <div className="flex items-center justify-between pb-2 border-b border-surface-container-low mb-3">
-                <span className="font-title-sm text-title-sm font-bold text-on-surface">Campus Sprint Feed</span>
-                <span className="font-label-sm text-label-sm text-secondary font-medium">Live</span>
-              </div>
-              <div className="space-y-3 text-body-sm text-body-sm">
-                <div className="flex gap-2.5 items-start">
-                  <span className="w-2 h-2 rounded-full bg-secondary mt-1.5 shrink-0"></span>
-                  <div>
-                    <span className="font-semibold text-on-surface">TreeHacks '26</span> track announced: Autonomous Agents with ₹15,000 bounty.
-                    <span className="block text-outline text-[11px] mt-0.5">10m ago</span>
-                  </div>
-                </div>
-                <div className="flex gap-2.5 items-start">
-                  <span className="w-2 h-2 rounded-full bg-secondary mt-1.5 shrink-0"></span>
-                  <div>
-                    <span className="font-semibold text-on-surface">Collegiate Circuit</span> registration open across partner universities.
-                    <span className="block text-outline text-[11px] mt-0.5">45m ago</span>
-                  </div>
-                </div>
-                <div className="flex gap-2.5 items-start">
-                  <span className="w-2 h-2 rounded-full bg-secondary mt-1.5 shrink-0"></span>
-                  <div>
-                    <span className="font-semibold text-on-surface">CalHacks 12</span> team registration opened for West Coast applicants.
-                    <span className="block text-outline text-[11px] mt-0.5">2h ago</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
 
           {/* Notifications Button */}
         <div className="relative">

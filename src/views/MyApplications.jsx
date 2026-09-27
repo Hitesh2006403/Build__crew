@@ -9,10 +9,10 @@ export default function MyApplications({ applications, onSelectProjectById }) {
           <span>Application Tracker</span>
         </div>
         <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
-          My Squad Applications
+          My Applications
         </h1>
         <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-          Review the status of your applications to live squads, hackathon teams, and startup seeds.
+          Track the status of your applications to student projects.
         </p>
       </div>
 
@@ -20,8 +20,8 @@ export default function MyApplications({ applications, onSelectProjectById }) {
         {applications.length === 0 ? (
           <div className="py-12 text-center text-on-surface-variant">
             <span className="material-symbols-outlined text-4xl text-outline mb-2">assignment_late</span>
-            <p className="font-body-lg text-body-lg text-on-surface font-semibold">No applications dispatched yet</p>
-            <p className="font-body-sm text-body-sm mt-1">Explore Discover Projects to join active campus squads.</p>
+            <p className="font-body-lg text-body-lg text-on-surface font-semibold">You haven't submitted any applications yet</p>
+            <p className="font-body-sm text-body-sm mt-1">Browse projects on the Discover page to apply for open roles.</p>
           </div>
         ) : (
           <div className="space-y-space-md">
@@ -40,7 +40,7 @@ export default function MyApplications({ applications, onSelectProjectById }) {
                     </span>
                   </div>
                   <div className="font-body-sm text-body-sm text-secondary font-medium">
-                    Applied Position: <span className="text-on-surface font-semibold">{app.role}</span>
+                    Role Applied For: <span className="text-on-surface font-semibold">{app.role}</span>
                   </div>
                   <p className="font-body-sm text-body-sm text-on-surface-variant max-w-xl">
                     {app.note}

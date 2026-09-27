@@ -34,6 +34,12 @@ export const projectsApi = {
       method: 'DELETE',
     });
   },
+
+  clearTeamFull: async (id) => {
+    return await apiClient(`/projects/${id}/clear-team-full`, {
+      method: 'PATCH',
+    });
+  },
 };
 
 export default projectsApi;

@@ -154,14 +154,14 @@ function cleanText(text) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex flex-col max-w-2xl">
           <div className="flex items-center gap-space-xs text-secondary font-label-md text-label-md uppercase tracking-wider mb-1">
-            <span className="material-symbols-outlined text-base">group_add</span>
-            <span>Student Builder Matchmaking</span>
+            <span className="material-symbols-outlined text-base">group</span>
+            <span>Teammates Directory</span>
           </div>
           <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
             Find Campus Teammates
           </h1>
           <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-            Scout real registered student engineers, designers, and researchers seeking squads for upcoming hackathons.
+            Browse registered students and invite them to collaborate on your projects or hackathon teams.
           </p>
         </div>
       </div>
@@ -176,7 +176,7 @@ function cleanText(text) {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search builders by name, skill, college, branch..."
+            placeholder="Search students by name, skills, college, branch..."
             className="w-full pl-10 pr-4 py-2.5 bg-surface text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm rounded-xl outline-none focus:bg-surface-container-lowest shadow-sm transition-all"
           />
         </div>
@@ -193,15 +193,6 @@ function cleanText(text) {
           </button>
           <button
             type="button"
-            onClick={() => setSelectedRole('backend')}
-            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
-              selectedRole === 'backend' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
-            }`}
-          >
-            Backend
-          </button>
-          <button
-            type="button"
             onClick={() => setSelectedRole('frontend')}
             className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
               selectedRole === 'frontend' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
@@ -211,12 +202,48 @@ function cleanText(text) {
           </button>
           <button
             type="button"
+            onClick={() => setSelectedRole('backend')}
+            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
+              selectedRole === 'backend' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+            }`}
+          >
+            Backend
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedRole('fullstack')}
+            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
+              selectedRole === 'fullstack' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+            }`}
+          >
+            Fullstack
+          </button>
+          <button
+            type="button"
             onClick={() => setSelectedRole('ai')}
             className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
               selectedRole === 'ai' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
             }`}
           >
             AI / ML
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedRole('mobile')}
+            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
+              selectedRole === 'mobile' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+            }`}
+          >
+            Mobile
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedRole('uiux')}
+            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
+              selectedRole === 'uiux' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+            }`}
+          >
+            UI / UX
           </button>
         </div>
       </div>
@@ -281,49 +308,23 @@ function cleanText(text) {
                           </span>
                         ) : null}
                       </div>
-                      <div className="font-body-sm text-body-sm text-secondary font-semibold">
-                        {b.roleTitle || b.role || 'Student Builder'}
-                      </div>
                       {collegeName && (
-                        <div className="font-label-sm text-label-sm text-on-surface-variant truncate">
-                          {collegeName} {branchName ? `· ${branchName}` : ''}
+                        <div className="font-label-sm text-label-sm text-on-surface font-medium truncate mt-0.5">
+                          {collegeName}
                         </div>
                       )}
-                      {!collegeName && branchName && (
-                        <div className="font-label-sm text-label-sm text-on-surface-variant truncate">
+                      {branchName && (
+                        <div className="font-label-sm text-xs text-on-surface-variant truncate">
                           {branchName}
                         </div>
                       )}
                       {semesterText && (
-                        <div className="text-[11px] text-outline font-medium">
+                        <div className="text-[11px] text-outline font-medium mt-0.5">
                           {semesterText}
                         </div>
                       )}
                     </div>
                   </div>
-
-                  {/* GitHub & Profile Links if present */}
-                  {b.github && (
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={b.github.startsWith('http') ? b.github : `https://${b.github}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-secondary hover:text-primary font-semibold transition-colors"
-                      >
-                        <span className="material-symbols-outlined text-sm">code</span>
-                        <span>GitHub Profile</span>
-                        <span className="material-symbols-outlined text-[10px]">arrow_outward</span>
-                      </a>
-                    </div>
-                  )}
-
-                  {/* Bio snippet if present */}
-                  {hasBio && (
-                    <p className="text-xs text-on-surface-variant line-clamp-2 leading-relaxed italic bg-surface-container-low/50 p-2 rounded-xl">
-                      "{b.bio}"
-                    </p>
-                  )}
 
                   {/* Skills badges if present */}
                   {hasSkills && (
@@ -403,13 +404,13 @@ function cleanText(text) {
               <div>
                 <div className="flex items-center gap-1.5 text-xs text-blue-300 font-bold uppercase tracking-wider mb-1">
                   <span className="material-symbols-outlined text-sm">person_add</span>
-                  <span>Dispatch Invitation</span>
+                  <span>Team Invitation</span>
                 </div>
                 <h3 className="text-xl font-bold tracking-tight">
                   Invite {selectedBuilderForInvite.name}
                 </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  Send a formal team invitation through BuildCrew and MongoDB.
+                  Invite them to collaborate on your project or hackathon team.
                 </p>
               </div>
               <button
@@ -428,7 +429,7 @@ function cleanText(text) {
                   <span className="material-symbols-outlined text-4xl text-outline">group_add</span>
                   <h4 className="font-bold text-base text-on-surface">No Active Teams Found</h4>
                   <p className="text-xs text-on-surface-variant max-w-sm mx-auto">
-                    You must first post a project or form a hackathon squad to invite teammates.
+                    You must first post a project or form a hackathon team to invite teammates.
                   </p>
                   <button
                     type="button"
@@ -442,7 +443,7 @@ function cleanText(text) {
                 <form onSubmit={handleSendInviteSubmit} className="space-y-4 text-sm">
                   <div>
                     <label className="text-xs font-bold uppercase text-outline block mb-1">
-                      Choose Your Squad / Project *
+                      Select Your Project or Team *
                     </label>
                     <select
                       required
@@ -452,7 +453,7 @@ function cleanText(text) {
                     >
                       {myAvailableSquads.map((sq) => (
                         <option key={sq.id} value={sq.id}>
-                          {sq.title} ({sq.type === 'project' ? 'Project' : 'Hackathon Squad'} · {sq.filledCount}/{sq.totalCapacity} Members)
+                          {sq.title} ({sq.type === 'project' ? 'Project' : 'Hackathon Team'} · {sq.filledCount}/{sq.totalCapacity} Members)
                         </option>
                       ))}
                     </select>
@@ -460,27 +461,27 @@ function cleanText(text) {
 
                   <div>
                     <label className="text-xs font-bold uppercase text-outline block mb-1">
-                      Invited Role Title *
+                      Role Offered *
                     </label>
                     <input
                       type="text"
                       required
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value)}
-                      placeholder="e.g. Frontend Engineer, ML Researcher, Teammate..."
+                      placeholder="e.g. Frontend Developer, ML Researcher, Teammate..."
                       className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all"
                     />
                   </div>
 
                   <div>
                     <label className="text-xs font-bold uppercase text-outline block mb-1">
-                      Personal Message
+                      Invitation Note (Optional)
                     </label>
                     <textarea
                       rows={2}
                       value={inviteMessage}
                       onChange={(e) => setInviteMessage(e.target.value)}
-                      placeholder="Add a personalized note..."
+                      placeholder="Add a personalized message..."
                       className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all resize-none"
                     />
                   </div>
@@ -499,7 +500,7 @@ function cleanText(text) {
                       className="px-5 py-2 rounded-xl bg-primary hover:bg-surface-tint text-on-primary text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5 active:scale-[0.98] disabled:opacity-50"
                     >
                       <span className="material-symbols-outlined text-sm">send</span>
-                      <span>{isSendingInvite ? 'Dispatching...' : 'Send Real Invitation'}</span>
+                      <span>{isSendingInvite ? 'Sending...' : 'Send Invitation'}</span>
                     </button>
                   </div>
                 </form>

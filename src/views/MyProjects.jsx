@@ -14,13 +14,13 @@ export default function MyProjects({ projects, currentUser, onSelectProject, onO
         <div className="flex flex-col max-w-3xl">
           <div className="flex items-center gap-space-xs text-secondary font-label-md text-label-md uppercase tracking-wider mb-1">
             <span className="material-symbols-outlined text-base">rocket_launch</span>
-            <span>Squad Lead Dashboard</span>
+            <span>Project Creator</span>
           </div>
           <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
-            My Posted Projects
+            Projects Created by You
           </h1>
           <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-            Manage your project roster, review candidate applications, and assign squad roles.
+            Manage your projects, view team members, and review role applications.
           </p>
         </div>
 
@@ -30,7 +30,7 @@ export default function MyProjects({ projects, currentUser, onSelectProject, onO
           className="flex items-center gap-space-xs px-space-md py-2.5 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm hover:bg-surface-tint active:scale-[0.98] transition-all shadow-md cursor-pointer self-start lg:self-auto"
         >
           <span className="material-symbols-outlined text-lg">add_circle</span>
-          <span>Post New Squad</span>
+          <span>Post a Project</span>
         </button>
       </div>
 
@@ -38,8 +38,8 @@ export default function MyProjects({ projects, currentUser, onSelectProject, onO
         {myCreated.length === 0 ? (
           <div className="py-12 text-center text-on-surface-variant">
             <span className="material-symbols-outlined text-4xl text-outline mb-2">workspaces</span>
-            <p className="font-body-lg text-body-lg text-on-surface font-semibold">You haven't posted any squads yet</p>
-            <p className="font-body-sm text-body-sm mt-1">Have an idea for HackNova or TreeHacks? Start recruiting teammates now.</p>
+            <p className="font-body-lg text-body-lg text-on-surface font-semibold">You haven't posted any projects yet</p>
+            <p className="font-body-sm text-body-sm mt-1">Have an idea or looking for teammates? Create a project to start recruiting.</p>
             <button
               type="button"
               onClick={onOpenPostProject}
@@ -58,7 +58,7 @@ export default function MyProjects({ projects, currentUser, onSelectProject, onO
                 <div>
                   <div className="flex items-center justify-between">
                     <span className="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
-                      {p.categoryBadge}
+                      {p.categoryBadge || p.category || 'Project'}
                     </span>
                     <span className="text-secondary font-semibold font-label-sm text-label-sm">
                       {p.filledCount}/{p.totalCapacity} Members
@@ -68,7 +68,7 @@ export default function MyProjects({ projects, currentUser, onSelectProject, onO
                     {p.title}
                   </h3>
                   <p className="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 mt-1">
-                    {p.tagline}
+                    {p.tagline || p.whatAreYouBuilding || p.problemBeingSolved}
                   </p>
                 </div>
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-high/60">
@@ -77,7 +77,7 @@ export default function MyProjects({ projects, currentUser, onSelectProject, onO
                     onClick={() => onSelectProject(p)}
                     className="py-1.5 px-3 rounded-xl bg-surface-container-lowest text-on-surface font-title-sm text-title-sm hover:bg-surface shadow-sm transition-all cursor-pointer"
                   >
-                    Manage Roster
+                    View Project &amp; Team
                   </button>
                 </div>
               </div>

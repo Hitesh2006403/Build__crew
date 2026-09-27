@@ -1,20 +1,54 @@
 import { useState, useMemo, useRef } from 'react';
 import HackathonDetailsModal from '../components/hackathons/HackathonDetailsModal';
 import hackathonsApi from '../api/hackathons';
+import projectsApi from '../api/projects';
 
 export default function AdminDashboard({
   currentUser,
   hackathons,
+  projects = [],
   onUpdateHackathons,
   onRefreshHackathons,
+  onRefreshProjects,
+  onUpdateProject,
   onResetDefaults,
   showToast,
   onNavigate
 }) {
   // Navigation: 'list' | 'form'
   const [view, setView] = useState('list');
+  const [adminActiveTab, setAdminActiveTab] = useState('hackathons'); // 'hackathons' | 'projects'
+  const [clearingProjectId, setClearingProjectId] = useState(null);
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+
+  const handleClearTeamFull = async (projectId) => {
+    try {
+      setClearingProjectId(projectId);
+      const res = await projectsApi.clearTeamFull(projectId);
+      if (res?.project) {
+        if (onUpdateProject) onUpdateProject(res.project);
+        if (onRefreshProjects) onRefreshProjects();
+        showToast?.(`Team Full status removed for "${res.project.title}". Squad is now open!`);
+      }
+    } catch (err) {
+      console.error('Failed to clear team full status:', err);
+      showToast?.(`Failed: ${err.message || 'Could not clear team full status'}`);
+    } finally {
+      setClearingProjectId(null);
+    }
+  };
+
+  const filteredProjectsList = useMemo(() => {
+    if (!projectSearchQuery.trim()) return projects;
+    const q = projectSearchQuery.toLowerCase();
+    return projects.filter(p => 
+      (p.title || '').toLowerCase().includes(q) ||
+      (p.category || p.categoryBadge || '').toLowerCase().includes(q) ||
+      (p.createdBy?.name || p.lead?.name || '').toLowerCase().includes(q)
+    );
+  }, [projects, projectSearchQuery]);
 
   // Table filters & sorting
   const [searchQuery, setSearchQuery] = useState('');
@@ -661,8 +695,176 @@ export default function AdminDashboard({
           </div>
         </div>
 
-        {/* Executive Stats Strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Navigation Tabs: Hackathons vs Projects */}
+        <div className="flex items-center gap-2 border-b border-surface-container-high/60 pb-1">
+          <button
+            type="button"
+            onClick={() => setAdminActiveTab('hackathons')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-title-sm text-title-sm transition-all cursor-pointer ${
+              adminActiveTab === 'hackathons'
+                ? 'bg-surface-container-high text-on-surface font-bold shadow-xs'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+            }`}
+          >
+            <span className="material-symbols-outlined text-lg">terminal</span>
+            <span>Manage Hackathons</span>
+            <span className="ml-1 px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant text-xs font-semibold">
+              {hackathons.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setAdminActiveTab('projects')}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-title-sm text-title-sm transition-all cursor-pointer ${
+              adminActiveTab === 'projects'
+                ? 'bg-surface-container-high text-on-surface font-bold shadow-xs'
+                : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+            }`}
+          >
+            <span className="material-symbols-outlined text-lg">rocket_launch</span>
+            <span>Project Squads & Team Full Status</span>
+            <span className="ml-1 px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant text-xs font-semibold">
+              {projects.length}
+            </span>
+          </button>
+        </div>
+
+        {adminActiveTab === 'projects' ? (
+          <div className="space-y-4">
+            {/* Search and stats bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-surface-container-lowest p-4 rounded-2xl border border-surface-container-high/50 shadow-xs">
+              <div className="relative w-full sm:w-80">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
+                  search
+                </span>
+                <input
+                  type="text"
+                  value={projectSearchQuery}
+                  onChange={(e) => setProjectSearchQuery(e.target.value)}
+                  placeholder="Search project title, creator, or category..."
+                  className="w-full pl-9 pr-3 py-2 bg-surface-container-low text-xs rounded-xl outline-none focus:ring-2 focus:ring-secondary/30 text-on-surface border border-transparent focus:border-secondary/20"
+                />
+              </div>
+
+              <div className="text-xs text-on-surface-variant flex items-center gap-2">
+                <span>Total Projects: <strong className="text-on-surface">{projects.length}</strong></span>
+                <span>•</span>
+                <span>Team Full: <strong className="text-rose-500">{projects.filter(p => (p.members?.length || p.filledCount || 1) >= (p.totalCapacity || 4) || p.status === 'full' || p.recruitingBadge === 'Squad Full').length}</strong></span>
+                {onRefreshProjects && (
+                  <button
+                    type="button"
+                    onClick={onRefreshProjects}
+                    className="ml-2 p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-on-surface cursor-pointer"
+                    title="Refresh projects from MongoDB"
+                  >
+                    <span className="material-symbols-outlined text-sm">refresh</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Projects Table */}
+            <div className="bg-surface-container-lowest rounded-2xl border border-surface-container-high/50 overflow-hidden shadow-xs">
+              {filteredProjectsList.length === 0 ? (
+                <div className="py-12 text-center text-on-surface-variant text-xs space-y-2">
+                  <span className="material-symbols-outlined text-3xl text-outline">folder_off</span>
+                  <p className="font-semibold text-sm text-on-surface">No projects found</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-surface-container-low text-outline font-semibold uppercase tracking-wider text-[11px] border-b border-surface-container-high">
+                      <tr>
+                        <th className="py-3 px-4">Project</th>
+                        <th className="py-3 px-4">Creator</th>
+                        <th className="py-3 px-4">Category</th>
+                        <th className="py-3 px-4">Members / Capacity</th>
+                        <th className="py-3 px-4">Team Status</th>
+                        <th className="py-3 px-4 text-right">Team Full Option</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-surface-container-high/40">
+                      {filteredProjectsList.map((p) => {
+                        const membersCount = Array.isArray(p.members) && p.members.length > 0
+                          ? p.members.length
+                          : (Number(p.filledCount) || 1);
+                        const maxCap = Number(p.totalCapacity) || 4;
+                        const isFull = membersCount >= maxCap || p.status === 'full' || p.recruitingBadge === 'Squad Full';
+                        const creatorName = p.createdBy?.name || p.lead?.name || 'Student Builder';
+                        const creatorCollege = p.createdBy?.college || p.createdBy?.university || p.lead?.university || '';
+
+                        return (
+                          <tr key={p._id || p.id} className="hover:bg-surface-container-low/50 transition-colors">
+                            <td className="py-3 px-4">
+                              <span className="font-bold text-on-surface block text-sm">{p.title}</span>
+                              {(p.tagline || p.whatAreYouBuilding) && (
+                                <span className="text-[11px] text-on-surface-variant line-clamp-1">{p.tagline || p.whatAreYouBuilding}</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="font-semibold text-on-surface block">{creatorName}</span>
+                              {creatorCollege && <span className="text-[11px] text-on-surface-variant block">{creatorCollege}</span>}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="px-2 py-0.5 rounded-md bg-surface-container text-secondary font-semibold text-[11px]">
+                                {p.category || p.categoryBadge || 'General'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="font-bold text-on-surface">{membersCount} / {maxCap}</span>
+                              <span className="text-on-surface-variant text-[11px] ml-1">Members</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              {isFull ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-600 font-semibold text-[11px]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                                  Team Full
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-semibold text-[11px]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                  Recruiting
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {isFull ? (
+                                <button
+                                  type="button"
+                                  disabled={clearingProjectId === (p._id || p.id)}
+                                  onClick={() => handleClearTeamFull(p._id || p.id)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary hover:bg-surface-tint text-on-primary font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-[0.98] disabled:opacity-50"
+                                >
+                                  <span className="material-symbols-outlined text-sm">lock_open</span>
+                                  <span>{clearingProjectId === (p._id || p.id) ? 'Clearing...' : 'Clear Team Full Status'}</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={clearingProjectId === (p._id || p.id)}
+                                  onClick={() => handleClearTeamFull(p._id || p.id)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-medium transition-all cursor-pointer disabled:opacity-50"
+                                  title="Expand capacity for this squad"
+                                >
+                                  <span className="material-symbols-outlined text-xs">add</span>
+                                  <span>+ Add Capacity</span>
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Executive Stats Strip */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
           <div
             onClick={() => setStatusFilter('all')}
             className={`p-4 rounded-2xl border transition-all cursor-pointer ${
@@ -1156,6 +1358,8 @@ export default function AdminDashboard({
               </div>
             </div>
           </div>
+        )}
+          </>
         )}
 
         {/* Live Preview Modal for Table Rows */}

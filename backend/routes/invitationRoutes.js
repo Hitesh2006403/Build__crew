@@ -183,16 +183,6 @@ router.post("/", authenticateUser, async (req, res) => {
       status: "pending",
     });
 
-    // Create real Notification in MongoDB for receiver
-    await Notification.create({
-      recipient: receiver._id,
-      type: "invitation_received",
-      title: "New Team Invitation",
-      message: `${req.user.name} invited you to join ${targetTeamName}`,
-      relatedId: invitation._id.toString(),
-      read: false,
-    });
-
     // Send email invitation to User B's registered email address
     try {
       await sendTeamInvitationEmail({
