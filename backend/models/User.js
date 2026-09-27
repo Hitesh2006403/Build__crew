@@ -20,23 +20,23 @@ const userSchema = new mongoose.Schema(
     },
     college: {
       type: String,
-      default: "Stanford University",
+      default: "",
     },
     university: {
       type: String,
-      default: "Stanford University",
+      default: "",
     },
     branch: {
       type: String,
-      default: "Computer Science",
+      default: "",
     },
     major: {
       type: String,
-      default: "Computer Science",
+      default: "",
     },
     semester: {
       type: Number,
-      default: 6,
+      default: 1,
     },
     graduationYear: {
       type: String,
@@ -73,7 +73,7 @@ const userSchema = new mongoose.Schema(
     },
     match: {
       type: String,
-      default: "95% Match",
+      default: "",
     },
     github: {
       type: String,
@@ -82,6 +82,10 @@ const userSchema = new mongoose.Schema(
     linkedin: {
       type: String,
       default: "",
+    },
+    showEmailToTeam: {
+      type: Boolean,
+      default: true,
     },
     profileImage: {
       type: String,

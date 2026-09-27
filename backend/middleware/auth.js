@@ -42,8 +42,8 @@ export const authenticateUser = async (req, res, next) => {
           name: decoded.name,
           role: "admin",
           roleTitle: "Co-Founder & Platform Architect",
-          college: "Stanford University",
-          branch: "Computer Science",
+          college: "",
+          branch: "",
         }),
       };
       return next();

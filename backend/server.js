@@ -75,9 +75,12 @@ app.get("/api/bootstrap", optionalAuth, async (req, res) => {
     const hackathonQuery = isAdmin ? {} : { isPublished: true };
 
     const [projects, hackathons, builders, hackathonSquads] = await Promise.all([
-      Project.find().populate("createdBy", "name email avatar university role").sort({ createdAt: -1 }),
+      Project.find()
+        .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+        .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+        .sort({ createdAt: -1 }),
       Hackathon.find(hackathonQuery).sort({ createdAt: -1 }),
-      User.find({ role: "student" }).select("-password").sort({ createdAt: -1 }),
+      User.find().select("-password").sort({ createdAt: -1 }),
       HackathonTeam.find().populate("createdBy", "name email avatar").sort({ createdAt: -1 }),
     ]);
 
@@ -115,7 +118,7 @@ app.use("/api/hackathons", hackathonRoutes);
 app.get("/api/builders", async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) return res.json([]);
-    const builders = await User.find({ role: "student" }).select("-password").sort({ createdAt: -1 });
+    const builders = await User.find().select("-password").sort({ createdAt: -1 });
     res.json(builders);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch builders from MongoDB." });
@@ -131,8 +134,8 @@ app.post("/api/builders", async (req, res) => {
       email: cleanEmail,
       password: "auto-generated-not-for-login",
       roleTitle: role || "Software Engineer",
-      university: university || "Collegiate Member",
-      college: university || "Collegiate Member",
+      university: university || "",
+      college: university || "",
       year: year || "'26",
       skills: Array.isArray(skills) ? skills : typeof skills === "string" ? skills.split(",").map((s) => s.trim()) : [],
       avatar: avatar || "",

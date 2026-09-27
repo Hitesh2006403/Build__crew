@@ -15,14 +15,14 @@ const router = express.Router();
 router.get("/my", authenticateUser, async (req, res) => {
   try {
     const received = await Invitation.find({ receiver: req.user._id })
-      .populate("sender", "name email avatar college university role")
+      .populate("sender", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge type members totalCapacity filledCount")
       .populate("team", "teamName")
       .populate("hackathonTeam", "teamName title hackathonTitle members totalCapacity filledCount")
       .sort({ createdAt: -1 });
 
     const sent = await Invitation.find({ sender: req.user._id })
-      .populate("receiver", "name email avatar college university role")
+      .populate("receiver", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge type members totalCapacity filledCount")
       .populate("team", "teamName")
       .populate("hackathonTeam", "teamName title hackathonTitle members totalCapacity filledCount")
@@ -38,25 +38,28 @@ router.get("/my", authenticateUser, async (req, res) => {
 // POST /api/invitations - Dispatch invitation to a student
 router.post("/", authenticateUser, async (req, res) => {
   try {
-    const { receiverId, projectId, hackathonTeamId, teamId, type, role, message } = req.body;
+    const targetReceiverId = req.body.receiverId || req.body.receiver;
+    const { hackathonTeamId, type, role, message } = req.body;
+    const inputProjectId = req.body.projectId || req.body.project;
+    const inputTeamId = req.body.teamId || req.body.team;
 
     // Rule 1: Valid receiverId
-    if (!receiverId || !mongoose.Types.ObjectId.isValid(receiverId)) {
+    if (!targetReceiverId || !mongoose.Types.ObjectId.isValid(targetReceiverId)) {
       return res.status(400).json({ error: "Valid receiverId is required." });
     }
 
     // Rule 2: Cannot invite yourself
-    if (receiverId.toString() === req.user._id.toString()) {
+    if (targetReceiverId.toString() === req.user._id.toString()) {
       return res.status(400).json({ error: "You cannot invite yourself to a team." });
     }
 
-    const receiver = await User.findById(receiverId);
+    const receiver = await User.findById(targetReceiverId);
     if (!receiver) {
       return res.status(404).json({ error: "Recipient student account not found." });
     }
 
     let targetType = type || (hackathonTeamId ? "hackathon" : "project");
-    let targetProjectId = projectId && mongoose.Types.ObjectId.isValid(projectId) ? projectId : null;
+    let targetProjectId = inputProjectId && mongoose.Types.ObjectId.isValid(inputProjectId) ? inputProjectId : null;
     let targetHackathonTeamId = hackathonTeamId && mongoose.Types.ObjectId.isValid(hackathonTeamId) ? hackathonTeamId : null;
     let targetTeamName = "Squad";
 
@@ -173,7 +176,7 @@ router.post("/", authenticateUser, async (req, res) => {
       type: targetType,
       project: targetProjectId || undefined,
       hackathonTeam: targetHackathonTeamId || undefined,
-      team: teamId && mongoose.Types.ObjectId.isValid(teamId) ? teamId : undefined,
+      team: inputTeamId && mongoose.Types.ObjectId.isValid(inputTeamId) ? inputTeamId : undefined,
       teamName: targetTeamName,
       role: role || "Teammate / Contributor",
       message: message || `${req.user.name} invited you to join ${targetTeamName}!`,
@@ -206,8 +209,8 @@ router.post("/", authenticateUser, async (req, res) => {
     }
 
     const populated = await Invitation.findById(invitation._id)
-      .populate("sender", "name email avatar college university role")
-      .populate("receiver", "name email avatar college university role")
+      .populate("sender", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("receiver", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge")
       .populate("hackathonTeam", "teamName title hackathonTitle");
 
@@ -325,8 +328,8 @@ router.patch("/:id", authenticateUser, async (req, res) => {
     }
 
     const updated = await Invitation.findById(id)
-      .populate("sender", "name email avatar college university role")
-      .populate("receiver", "name email avatar college university role")
+      .populate("sender", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("receiver", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge members totalCapacity filledCount")
       .populate("hackathonTeam", "teamName title members totalCapacity filledCount");
 

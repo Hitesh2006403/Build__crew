@@ -40,13 +40,35 @@ const projectSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    category: {
+      type: String,
+      default: "",
+    },
+    problemBeingSolved: {
+      type: String,
+      default: "",
+    },
+    whatAreYouBuilding: {
+      type: String,
+      default: "",
+    },
+    expectedCompletionDate: {
+      type: String,
+      default: "",
+    },
+    roles: [
+      {
+        roleName: String,
+        membersCount: { type: Number, default: 1 },
+      },
+    ],
     urgency: {
       type: String,
       default: "medium",
     },
     matchScore: {
       type: Number,
-      default: 92,
+      default: 0,
     },
     publishedTime: {
       type: String,
@@ -54,11 +76,11 @@ const projectSchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      default: "https://lh3.googleusercontent.com/aida-public/AB6AXuBjbkVkD8ugQCopgjlKUdX6h2t7iGR8U7cAotGEX4gkVp2iZGYgNXuhDd7uv8XKPdDKxRc5LVG5-2ku_w-inG49pGRXEBeatfaGIbtDqTB4GZbf-12sVHdMJBR4s9dSwOvIgdwjHPZxHAYY6iul7GnOXO1wqM8s9NQjaFCIpekgajipka8rL8aNXyl4sNuZ5jWKKChl91y1bgaayoCYgzuMAvhhpxODIRFzAx9FdSUbydfyLDzrLu9E",
+      default: "",
     },
     imageTag: {
       type: String,
-      default: "Collegiate Sprint",
+      default: "",
     },
     techStack: {
       type: [String],
@@ -70,7 +92,7 @@ const projectSchema = new mongoose.Schema(
     },
     campus: {
       type: String,
-      default: "stanford",
+      default: "",
     },
     filledCount: {
       type: Number,
@@ -89,7 +111,7 @@ const projectSchema = new mongoose.Schema(
       name: { type: String, default: "" },
       university: { type: String, default: "" },
       program: { type: String, default: "" },
-      roleTitle: { type: String, default: "Lead Architect" },
+      roleTitle: { type: String, default: "Squad Creator" },
       avatar: { type: String, default: "" },
       leadAvatarFull: { type: String, default: "" },
     },
@@ -100,9 +122,9 @@ const projectSchema = new mongoose.Schema(
       },
     ],
     metaStats: {
-      commits: { type: String, default: "12 commits" },
-      branches: { type: String, default: "across 2 branches" },
-      submissionTarget: { type: String, default: "Upcoming Sprint" },
+      commits: { type: String, default: "" },
+      branches: { type: String, default: "" },
+      submissionTarget: { type: String, default: "" },
     },
     problemSolving: {
       description: { type: String, default: "" },

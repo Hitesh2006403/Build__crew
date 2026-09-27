@@ -35,14 +35,15 @@ router.get("/", authenticateUser, async (req, res) => {
 // POST /api/applications - Apply to join a project
 router.post("/", authenticateUser, async (req, res) => {
   try {
-    const { projectId, role, requestedRole, message, note } = req.body;
-    const targetRole = requestedRole || role || "Core Squad Engineer";
+    const { projectId, project: bodyProject, role, requestedRole, message, note } = req.body;
+    const targetProjectId = projectId || bodyProject;
+    const targetRole = role || requestedRole || "Core Squad Engineer";
 
-    if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+    if (!targetProjectId || !mongoose.Types.ObjectId.isValid(targetProjectId)) {
       return res.status(400).json({ error: "Valid projectId is required." });
     }
 
-    const project = await Project.findById(projectId);
+    const project = await Project.findById(targetProjectId);
     if (!project) {
       return res.status(404).json({ error: "Project not found in database." });
     }
@@ -52,15 +53,20 @@ router.post("/", authenticateUser, async (req, res) => {
       return res.status(400).json({ error: "You cannot apply to your own project." });
     }
 
-    // Rule: Cannot apply twice to same project for the same role
+    // Rule: Cannot apply if already a member
+    if (project.members.some((m) => m.toString() === req.user._id.toString())) {
+      return res.status(400).json({ error: "You are already a member of this project." });
+    }
+
+    // Rule: Cannot apply twice to same project with pending application
     const existingApp = await Application.findOne({
       project: project._id,
       applicant: req.user._id,
-      requestedRole: targetRole,
+      status: "pending",
     });
 
     if (existingApp) {
-      return res.status(409).json({ error: "You have already submitted an application for this role in this project." });
+      return res.status(409).json({ error: "You already have a pending application for this project." });
     }
 
     const newApp = await Application.create({

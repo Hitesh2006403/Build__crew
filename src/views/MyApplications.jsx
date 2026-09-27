@@ -51,17 +51,10 @@ export default function MyApplications({ applications, onSelectProjectById }) {
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() => onSelectProjectById(app.projectId)}
-                    className="py-2 px-4 rounded-xl bg-surface-container-lowest hover:bg-surface text-on-surface font-title-sm text-title-sm shadow-sm transition-all cursor-pointer"
+                    onClick={() => onSelectProjectById(app.projectId || app.project?._id || app.project)}
+                    className="py-2 px-4 rounded-xl bg-surface-container-lowest hover:bg-surface text-on-surface font-title-sm text-title-sm shadow-sm transition-all cursor-pointer font-medium"
                   >
                     View Project
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => alert(`Opening squad channel for ${app.projectTitle}`)}
-                    className="py-2 px-4 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm hover:bg-surface-tint transition-all cursor-pointer"
-                  >
-                    Chat Lead
                   </button>
                 </div>
               </div>

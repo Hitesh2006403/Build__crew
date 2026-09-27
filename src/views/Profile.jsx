@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import usersApi from '../api/users';
 
+function cleanText(text) {
+  if (!text) return '';
+  const trimmed = String(text).trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'campus member' || lower === 'collegiate campus' || lower === 'nothing' || lower === 'n/a') {
+    return '';
+  }
+  return trimmed;
+}
+
 export default function Profile({ 
   currentUser, 
   targetUserId, 
@@ -15,7 +25,8 @@ export default function Profile({
   
   // Editable form state for own profile
   const [name, setName] = useState(currentUser?.name || '');
-  const [campus, setCampus] = useState(currentUser?.university || currentUser?.college || '');
+  const [email, setEmail] = useState(currentUser?.email || '');
+  const [campus, setCampus] = useState(currentUser?.college || currentUser?.university || '');
   const [branch, setBranch] = useState(currentUser?.branch || currentUser?.major || '');
   const [semester, setSemester] = useState(currentUser?.semester || 1);
   const [graduationYear, setGraduationYear] = useState(currentUser?.graduationYear || '2026');
@@ -23,6 +34,7 @@ export default function Profile({
   const [skills, setSkills] = useState(Array.isArray(currentUser?.skills) ? currentUser.skills.join(', ') : '');
   const [github, setGithub] = useState(currentUser?.github || '');
   const [linkedin, setLinkedin] = useState(currentUser?.linkedin || '');
+  const [showEmailToTeam, setShowEmailToTeam] = useState(currentUser?.showEmailToTeam !== false);
   const [saved, setSaved] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -37,7 +49,8 @@ export default function Profile({
             setUser(data);
             if (!isViewingOther) {
               setName(data.name || '');
-              setCampus(data.university || data.college || '');
+              setEmail(data.email || '');
+              setCampus(cleanText(data.college || data.university));
               setBranch(data.branch || data.major || '');
               setSemester(data.semester || 1);
               setGraduationYear(data.graduationYear || '2026');
@@ -45,6 +58,7 @@ export default function Profile({
               setSkills(Array.isArray(data.skills) ? data.skills.join(', ') : '');
               setGithub(data.github || '');
               setLinkedin(data.linkedin || '');
+              setShowEmailToTeam(data.showEmailToTeam !== false);
             }
           }
         })
@@ -65,17 +79,19 @@ export default function Profile({
         .filter(Boolean);
 
       const updatePayload = {
-        name,
-        college: campus,
-        university: campus,
-        branch,
-        major: branch,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        college: campus.trim(),
+        university: campus.trim(),
+        branch: branch.trim(),
+        major: branch.trim(),
         semester: Number(semester) || 1,
-        graduationYear,
-        bio,
+        graduationYear: graduationYear.trim(),
+        bio: bio.trim(),
         skills: skillsArr,
         github: github.trim(),
         linkedin: linkedin.trim(),
+        showEmailToTeam: Boolean(showEmailToTeam),
       };
 
       const res = await usersApi.updateUser(currentUser._id, updatePayload);
@@ -101,6 +117,7 @@ export default function Profile({
 
   const activeUser = user || currentUser || {};
   const avatarUrl = activeUser.avatar || activeUser.profileImage || "";
+  const displayCollege = cleanText(activeUser.college || activeUser.university);
 
   if (loadingProfile && !activeUser._id) {
     return (
@@ -110,6 +127,9 @@ export default function Profile({
       </div>
     );
   }
+
+  // Email privacy check: show email if viewing own profile, or if user allows showing email to team members
+  const canViewEmail = !isViewingOther || activeUser.showEmailToTeam !== false || currentUser?.role === 'admin';
 
   return (
     <div className="flex flex-col w-full pb-space-xl space-y-space-lg max-w-4xl">
@@ -127,20 +147,15 @@ export default function Profile({
 
       <div className="flex flex-col">
         <div className="flex items-center gap-space-xs text-secondary font-label-md text-label-md uppercase tracking-wider mb-1">
-          <span className="material-symbols-outlined text-base">verified</span>
-          <span>{isViewingOther ? 'Verified Collegiate Builder Portfolio' : 'Verified Student Identity'}</span>
+          <span className="material-symbols-outlined text-base">person</span>
+          <span>{isViewingOther ? 'Student Builder Profile' : 'Student Profile'}</span>
         </div>
         <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
-          {isViewingOther ? `${activeUser.name || 'Builder'}'s Profile` : 'Builder Profile & Badges'}
+          {isViewingOther ? `${activeUser.name || 'Builder'}'s Profile` : 'Builder Profile & Settings'}
         </h1>
-        <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-          {isViewingOther 
-            ? 'Verified student credentials, technical competencies, and collegiate squad record.' 
-            : 'Manage your verified campus credentials, technical skills, and hackathon circuit presence.'}
-        </p>
       </div>
 
-      <div className="bg-surface-container-lowest rounded-2xl shadow-sm p-space-lg space-y-space-lg">
+      <div className="bg-surface-container-lowest rounded-2xl shadow-sm p-space-lg space-y-space-lg border border-surface-container-high/40">
         {/* User Card Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md pb-space-md border-b border-surface-container-low">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-space-md">
@@ -168,20 +183,25 @@ export default function Profile({
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">{activeUser.name || 'Student Builder'}</h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold flex items-center gap-1">
-                  <span className="material-symbols-outlined text-xs">verified</span>
-                  Verified {activeUser.role === 'admin' ? 'Administrator' : 'Student Builder'}
-                </span>
+                {activeUser.roleTitle && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
+                    {activeUser.roleTitle}
+                  </span>
+                )}
               </div>
-              <p className="font-body-md text-body-md text-on-surface-variant">
-                {activeUser.university || activeUser.college || 'Collegiate Campus'} {activeUser.branch ? `· ${activeUser.branch}` : ''} {activeUser.graduationYear ? `· Class of '${String(activeUser.graduationYear).slice(-2)}` : ''}
-              </p>
+              {(displayCollege || activeUser.branch) && (
+                <p className="font-body-md text-body-md text-on-surface-variant">
+                  {displayCollege} {activeUser.branch ? `· ${activeUser.branch}` : ''}
+                </p>
+              )}
 
               <div className="flex flex-wrap items-center gap-3 pt-1 text-label-sm text-secondary font-semibold">
-                <span>{activeUser.email}</span>
-                {activeUser.github && (
+                {canViewEmail && activeUser.email && (
+                  <span>{activeUser.email}</span>
+                )}
+                {activeUser.github && cleanText(activeUser.github) && (
                   <>
-                    <span>•</span>
+                    {canViewEmail && activeUser.email && <span>•</span>}
                     <a
                       href={activeUser.github.startsWith('http') ? activeUser.github : `https://${activeUser.github}`}
                       target="_blank"
@@ -189,11 +209,11 @@ export default function Profile({
                       className="hover:underline flex items-center gap-1 text-primary"
                     >
                       <span className="material-symbols-outlined text-sm">code</span>
-                      GitHub Profile
+                      GitHub
                     </a>
                   </>
                 )}
-                {activeUser.linkedin && (
+                {activeUser.linkedin && cleanText(activeUser.linkedin) && (
                   <>
                     <span>•</span>
                     <a
@@ -216,21 +236,21 @@ export default function Profile({
             <button
               type="button"
               onClick={() => onInviteBuilder(activeUser)}
-              className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm shadow-md hover:bg-surface-tint active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2 self-stretch sm:self-auto justify-center"
+              className="px-5 py-2.5 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm shadow-md hover:bg-surface-tint active:scale-[0.98] transition-all cursor-pointer flex items-center gap-2 self-stretch sm:self-auto justify-center font-semibold"
             >
               <span className="material-symbols-outlined text-base">person_add</span>
-              <span>Invite to Squad</span>
+              <span>Invite to Team</span>
             </button>
           )}
         </div>
 
-        {/* If viewing another student: Read-only portfolio layout */}
+        {/* If viewing another student: Read-only profile layout */}
         {isViewingOther ? (
           <div className="space-y-6">
-            {activeUser.bio && (
+            {activeUser.bio && cleanText(activeUser.bio) && (
               <div className="p-4 rounded-xl bg-surface-container-low/70 border border-surface-container-high/60 space-y-1.5">
                 <span className="font-semibold text-on-surface block text-label-sm uppercase tracking-wider">
-                  Builder Bio &amp; Technical Vision
+                  About
                 </span>
                 <p className="font-body-md text-on-surface leading-relaxed">{activeUser.bio}</p>
               </div>
@@ -239,7 +259,7 @@ export default function Profile({
             {(Array.isArray(activeUser.skills) && activeUser.skills.length > 0) && (
               <div>
                 <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider block mb-2">
-                  Technical Skills
+                  Skills
                 </span>
                 <div className="flex flex-wrap gap-2">
                   {activeUser.skills.map((skill, sidx) => (
@@ -253,21 +273,6 @@ export default function Profile({
                 </div>
               </div>
             )}
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/50">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-outline block">Academic Year</span>
-                <span className="font-bold text-sm text-on-surface block mt-0.5">{activeUser.year || activeUser.graduationYear || 'Not specified'}</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/50">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-outline block">Current Semester</span>
-                <span className="font-bold text-sm text-on-surface block mt-0.5">{activeUser.semester ? `Semester ${activeUser.semester}` : 'Not specified'}</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/50">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-outline block">Collegiate Major</span>
-                <span className="font-bold text-sm text-on-surface block mt-0.5 truncate">{activeUser.branch || activeUser.major || 'Not specified'}</span>
-              </div>
-            </div>
           </div>
         ) : (
           /* Editable Form for Logged-In User */
@@ -284,20 +289,30 @@ export default function Profile({
                 />
               </div>
               <div>
-                <label className="block font-title-sm text-title-sm text-on-surface mb-1">Campus Affiliation / College</label>
+                <label className="block font-title-sm text-title-sm text-on-surface mb-1">Email Address</label>
                 <input
-                  type="text"
+                  type="email"
                   required
-                  value={campus}
-                  onChange={(e) => setCampus(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
               <div>
-                <label className="block font-title-sm text-title-sm text-on-surface mb-1">Major / Branch</label>
+                <label className="block font-title-sm text-title-sm text-on-surface mb-1">College / University</label>
+                <input
+                  type="text"
+                  value={campus}
+                  onChange={(e) => setCampus(e.target.value)}
+                  placeholder="Your college or university"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block font-title-sm text-title-sm text-on-surface mb-1">Branch / Major</label>
                 <input
                   type="text"
                   value={branch}
@@ -306,56 +321,36 @@ export default function Profile({
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
                 />
               </div>
-              <div>
-                <label className="block font-title-sm text-title-sm text-on-surface mb-1">Current Semester</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={semester}
-                  onChange={(e) => setSemester(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block font-title-sm text-title-sm text-on-surface mb-1">Graduation Year</label>
-                <input
-                  type="text"
-                  value={graduationYear}
-                  onChange={(e) => setGraduationYear(e.target.value)}
-                  placeholder="e.g. 2026"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
-                />
-              </div>
             </div>
 
             <div>
-              <label className="block font-title-sm text-title-sm text-on-surface mb-1">Builder Bio</label>
+              <label className="block font-title-sm text-title-sm text-on-surface mb-1">Bio</label>
               <textarea
                 rows={3}
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="Tell squads about your background and interests..."
+                placeholder="Tell potential teammates about your interests and projects..."
                 className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all resize-none"
               />
             </div>
 
             <div>
-              <label className="block font-title-sm text-title-sm text-on-surface mb-1">Technical Skills (Comma separated)</label>
+              <label className="block font-title-sm text-title-sm text-on-surface mb-1">Skills (Comma separated)</label>
               <input
                 type="text"
                 value={skills}
                 onChange={(e) => setSkills(e.target.value)}
-                placeholder="e.g. React 19, Python, PyTorch, MongoDB, FastAPI"
+                placeholder="e.g. React, Node.js, Python, MongoDB"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
               />
             </div>
 
+            {/* Contact Settings (Requirement 12) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
               <div>
                 <label className="block font-title-sm text-title-sm text-on-surface mb-1">GitHub URL</label>
                 <input
-                  type="text"
+                  type="url"
                   value={github}
                   onChange={(e) => setGithub(e.target.value)}
                   placeholder="https://github.com/username"
@@ -365,13 +360,27 @@ export default function Profile({
               <div>
                 <label className="block font-title-sm text-title-sm text-on-surface mb-1">LinkedIn Profile</label>
                 <input
-                  type="text"
+                  type="url"
                   value={linkedin}
                   onChange={(e) => setLinkedin(e.target.value)}
                   placeholder="https://linkedin.com/in/username"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
                 />
               </div>
+            </div>
+
+            {/* Privacy option: "Show my email to team members" */}
+            <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/60 flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="showEmailToTeamCheckbox"
+                checked={showEmailToTeam}
+                onChange={(e) => setShowEmailToTeam(e.target.checked)}
+                className="w-4 h-4 text-secondary rounded focus:ring-secondary cursor-pointer"
+              />
+              <label htmlFor="showEmailToTeamCheckbox" className="font-body-sm text-body-sm text-on-surface font-medium cursor-pointer">
+                Show my email to team members
+              </label>
             </div>
 
             <div className="pt-2 flex items-center justify-between">
@@ -385,7 +394,7 @@ export default function Profile({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="px-6 py-2.5 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm shadow-md hover:bg-surface-tint active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+                className="px-6 py-2.5 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm shadow-md hover:bg-surface-tint active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 font-semibold"
               >
                 {isSubmitting ? 'Saving to MongoDB...' : 'Save Profile'}
               </button>

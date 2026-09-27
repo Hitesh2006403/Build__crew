@@ -40,8 +40,8 @@ router.get("/", async (req, res) => {
     }
 
     const projects = await Project.find(query)
-      .populate("createdBy", "name email avatar university role")
-      .populate("members", "name email avatar university role")
+      .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
       .sort({ createdAt: -1 });
 
     return res.json(projects);
@@ -59,15 +59,15 @@ router.get("/:id", async (req, res) => {
 
     if (mongoose.Types.ObjectId.isValid(id)) {
       project = await Project.findById(id)
-        .populate("createdBy", "name email avatar university role github linkedin")
-        .populate("members", "name email avatar university role github linkedin");
+        .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+        .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam");
     }
 
     if (!project) {
       // Fallback search by custom slug or title if applicable
       project = await Project.findOne({ $or: [{ _id: mongoose.Types.ObjectId.isValid(id) ? id : null }, { fullTitle: id }] })
-        .populate("createdBy", "name email avatar university role")
-        .populate("members", "name email avatar university role");
+        .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+        .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam");
     }
 
     if (!project) {
@@ -89,6 +89,11 @@ router.post("/", authenticateUser, async (req, res) => {
       tagline,
       type,
       categoryBadge,
+      category,
+      problemBeingSolved,
+      whatAreYouBuilding,
+      expectedCompletionDate,
+      roles,
       techStack,
       rolesNeeded,
       campus,
@@ -116,50 +121,58 @@ router.post("/", authenticateUser, async (req, res) => {
 
     const vacancies = Array.isArray(openVacancies) && openVacancies.length > 0
       ? openVacancies
-      : [
-          {
-            id: `dev-${Date.now()}`,
-            track: "Core Contributor",
-            title: parsedRolesNeeded[0] || "Fullstack Engineer",
-            seats: "1 seat available",
-            desc: tagline || "Core contributor to project milestones",
-            skills: parsedTechStack.slice(0, 3),
-            hours: "8–10 hrs / week",
-          },
-        ];
+      : parsedRolesNeeded.map((r, i) => ({
+          id: `dev-${Date.now()}-${i}`,
+          track: "Core Contributor",
+          title: r,
+          seats: "1 seat available",
+          desc: whatAreYouBuilding || tagline || "",
+          skills: parsedTechStack.slice(0, 3),
+          hours: "",
+        }));
+
+    const finalTagline = tagline ? tagline.trim() : (whatAreYouBuilding ? whatAreYouBuilding.trim() : "");
+    const finalDescription = (problemBeingSolved && whatAreYouBuilding)
+      ? `${problemBeingSolved.trim()}\n\n${whatAreYouBuilding.trim()}`
+      : (problemBeingSolved || whatAreYouBuilding || tagline || "");
 
     const newProject = await Project.create({
       title: title.trim(),
-      fullTitle: fullTitle ? fullTitle.trim() : `${title.trim()} — Collegiate Sprint`,
-      tagline: tagline ? tagline.trim() : "",
-      fullDescription: tagline ? tagline.trim() : "",
+      fullTitle: fullTitle ? fullTitle.trim() : title.trim(),
+      tagline: finalTagline,
+      fullDescription: finalDescription,
+      problemBeingSolved: problemBeingSolved ? problemBeingSolved.trim() : "",
+      whatAreYouBuilding: whatAreYouBuilding ? whatAreYouBuilding.trim() : "",
+      expectedCompletionDate: expectedCompletionDate ? expectedCompletionDate.trim() : "",
+      category: category ? category.trim() : (categoryBadge ? categoryBadge.trim() : ""),
+      categoryBadge: category ? category.trim() : (categoryBadge ? categoryBadge.trim() : ""),
       type: type || "hackathon",
-      categoryBadge: categoryBadge || "Collegiate Sprint",
-      recruitingBadge: `Recruiting ${vacancies.length} Roles`,
+      recruitingBadge: vacancies.length > 0 ? `Recruiting ${vacancies.length} Roles` : "Recruiting Roles",
       techStack: parsedTechStack,
       rolesNeeded: parsedRolesNeeded,
-      campus: campus || "stanford",
+      roles: Array.isArray(roles) ? roles : [],
+      campus: campus ? campus.trim() : (req.user.college || req.user.university || ""),
       filledCount: 1,
       totalCapacity: Number(totalCapacity) || 4,
       openVacancies: vacancies,
-      image: image || "https://lh3.googleusercontent.com/aida-public/AB6AXuBjbkVkD8ugQCopgjlKUdX6h2t7iGR8U7cAotGEX4gkVp2iZGYgNXuhDd7uv8XKPdDKxRc5LVG5-2ku_w-inG49pGRXEBeatfaGIbtDqTB4GZbf-12sVHdMJBR4s9dSwOvIgdwjHPZxHAYY6iul7GnOXO1wqM8s9NQjaFCIpekgajipka8rL8aNXyl4sNuZ5jWKKChl91y1bgaayoCYgzuMAvhhpxODIRFzAx9FdSUbydfyLDzrLu9E",
+      image: image ? image.trim() : "",
       githubRepository: githubRepository ? githubRepository.trim() : "",
       createdBy: req.user._id,
       lead: {
         name: req.user.name,
-        university: req.user.university || req.user.college || "Collegiate Member",
-        program: req.user.branch || req.user.major || "Computer Science",
-        roleTitle: "Lead Architect",
-        avatar: req.user.avatar || req.user.profileImage,
-        leadAvatarFull: req.user.avatar || req.user.profileImage,
+        university: req.user.university || req.user.college || "",
+        program: req.user.branch || req.user.major || "",
+        roleTitle: req.user.roleTitle || "Squad Creator",
+        avatar: req.user.avatar || req.user.profileImage || "",
+        leadAvatarFull: req.user.avatar || req.user.profileImage || "",
       },
       members: [req.user._id],
       status: "recruiting",
     });
 
     const populated = await Project.findById(newProject._id)
-      .populate("createdBy", "name email avatar university role")
-      .populate("members", "name email avatar university role");
+      .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam");
 
     return res.status(201).json({
       success: true,

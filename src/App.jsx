@@ -96,7 +96,11 @@ export default function App() {
       const data = await projectsApi.getProjects();
       const loaded = Array.isArray(data) ? data : (data.projects || []);
       setProjects(loaded);
-      setSelectedProject(prev => prev || (loaded.length > 0 ? loaded[0] : null));
+      setSelectedProject(prev => {
+        if (!prev) return loaded.length > 0 ? loaded[0] : null;
+        const updated = loaded.find(p => String(p._id || p.id) === String(prev._id || prev.id));
+        return updated || prev;
+      });
     } catch (err) {
       console.warn('Could not fetch projects from MongoDB:', err);
     }
@@ -104,7 +108,7 @@ export default function App() {
 
   const fetchBuilders = useCallback(async () => {
     try {
-      const data = await usersApi.getUsers({ role: 'student' });
+      const data = await usersApi.getUsers();
       setBuilders(Array.isArray(data) ? data : []);
     } catch (err) {
       console.warn('Could not fetch builders from MongoDB:', err);

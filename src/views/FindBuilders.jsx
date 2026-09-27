@@ -50,6 +50,16 @@ export default function FindBuilders({
       }))
   ];
 
+function cleanText(text) {
+  if (!text) return '';
+  const trimmed = String(text).trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === 'campus member' || lower === 'collegiate campus' || lower === 'nothing' || lower === 'n/a') {
+    return '';
+  }
+  return trimmed;
+}
+
   const handleOpenInviteModal = (builder) => {
     if (!currentUser) {
       if (showToast) showToast('Please sign in to invite teammates.');
@@ -59,10 +69,12 @@ export default function FindBuilders({
       if (showToast) showToast('You cannot invite yourself to a team.');
       return;
     }
-    setSelectedBuilderForInvite(builder);
-    if (myAvailableSquads.length > 0) {
-      setSelectedSquadTarget(myAvailableSquads[0].id);
+    if (myAvailableSquads.length === 0) {
+      if (showToast) showToast('You must create a project or squad first before you can invite teammates.');
+      return;
     }
+    setSelectedBuilderForInvite(builder);
+    setSelectedSquadTarget(myAvailableSquads[0].id);
     setInviteRole('Core Contributor');
     setInviteMessage(`Hey ${builder.name?.split(' ')[0] || 'there'}, join our squad on BuildCrew!`);
   };
@@ -210,7 +222,7 @@ export default function FindBuilders({
           filteredBuilders.map((b) => {
             const isSelf = currentUser && String(b._id || b.id) === String(currentUser._id);
             const avatarImg = b.avatar || b.profileImage;
-            const collegeName = b.college || b.university || '';
+            const collegeName = cleanText(b.college || b.university);
             const branchName = b.branch || b.major || '';
             const semesterText = b.semester ? `Semester ${b.semester}` : (b.year ? `Class of ${b.year}` : '');
             const hasSkills = Array.isArray(b.skills) && b.skills.length > 0;
