@@ -7,6 +7,9 @@ export default function Header({
   onSearchFocus,
   notificationCount = 0,
   notifications = [],
+  pendingInvitations = [],
+  onAcceptInvitation,
+  onRejectInvitation,
   onMarkRead,
   onMarkAllRead,
   onNavigateProfile,
@@ -58,7 +61,7 @@ export default function Header({
 
         <div className="hidden lg:flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-md text-label-md select-none">
           <span className="material-symbols-outlined text-secondary text-base leading-none">school</span>
-          <span>{currentUser?.university || 'Stanford University'}</span>
+          <span>{currentUser?.university || currentUser?.college || 'Campus Member'}</span>
           <span className="text-outline-variant">•</span>
           <span className="text-on-surface-variant font-medium">Fall 2026</span>
         </div>
@@ -110,10 +113,10 @@ export default function Header({
                   </div>
                 </div>
                 <div className="flex gap-2.5 items-start">
-                  <span className="w-2 h-2 rounded-full bg-error mt-1.5 shrink-0"></span>
+                  <span className="w-2 h-2 rounded-full bg-secondary mt-1.5 shrink-0"></span>
                   <div>
-                    <span className="font-semibold text-on-surface">StudySync AI</span> filled Backend Seat. 2 roles remaining.
-                    <span className="block text-outline text-[11px] mt-0.5">42m ago</span>
+                    <span className="font-semibold text-on-surface">Collegiate Circuit</span> registration open across partner universities.
+                    <span className="block text-outline text-[11px] mt-0.5">45m ago</span>
                   </div>
                 </div>
                 <div className="flex gap-2.5 items-start">
@@ -136,17 +139,19 @@ export default function Header({
             className={`relative w-9 h-9 flex items-center justify-center rounded-xl text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all cursor-pointer ${showNotifications ? 'bg-surface-container text-secondary' : ''}`}
           >
             <span className="material-symbols-outlined text-xl">notifications</span>
-            {notificationCount > 0 && (
+            {(notificationCount > 0 || (pendingInvitations && pendingInvitations.length > 0)) && (
               <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-secondary"></span>
             )}
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-high p-space-md z-50 animate-modal max-h-96 overflow-y-auto">
+            <div className="absolute right-0 mt-2 w-84 bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-high p-space-md z-50 animate-modal max-h-[80vh] overflow-y-auto">
               <div className="flex items-center justify-between pb-2 border-b border-surface-container-low mb-3">
                 <span className="font-title-sm text-title-sm font-bold text-on-surface">Notifications</span>
                 <div className="flex items-center gap-2">
-                  <span className="font-label-sm text-label-sm text-secondary font-semibold">{notificationCount} new</span>
+                  <span className="font-label-sm text-label-sm text-secondary font-semibold">
+                    {notificationCount + (pendingInvitations?.length || 0)} new
+                  </span>
                   {notificationCount > 0 && onMarkAllRead && (
                     <button
                       type="button"
@@ -158,8 +163,60 @@ export default function Header({
                   )}
                 </div>
               </div>
+
+              {/* Pending Team Invitations (Requirement 4 & 5: Accept / Reject) */}
+              {pendingInvitations && pendingInvitations.length > 0 && (
+                <div className="space-y-2.5 mb-3.5 pb-3 border-b border-surface-container-low">
+                  <div className="flex items-center justify-between text-xs font-bold text-secondary uppercase tracking-wider">
+                    <div className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-sm">mail</span>
+                      <span>Squad Invitations</span>
+                    </div>
+                    <span className="px-2 py-0.2 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[10px] font-extrabold">
+                      {pendingInvitations.length} pending
+                    </span>
+                  </div>
+
+                  {pendingInvitations.map((inv) => {
+                    const senderName = inv.sender?.name || 'A teammate';
+                    const teamTitle = inv.teamName || inv.project?.title || inv.hackathonTeam?.teamName || 'the squad';
+                    return (
+                      <div key={inv._id} className="p-3 rounded-xl bg-surface-container-low border border-secondary/25 space-y-2">
+                        <div className="text-xs">
+                          <span className="font-bold text-on-surface">{senderName}</span>
+                          <span className="text-on-surface-variant"> invited you to join </span>
+                          <span className="font-bold text-secondary">[{teamTitle}]</span>
+                          {inv.role && (
+                            <span className="block text-[11px] text-on-surface-variant mt-0.5">Role: {inv.role}</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => onAcceptInvitation && onAcceptInvitation(inv._id)}
+                            className="flex-1 py-1.5 px-3 rounded-lg bg-primary hover:bg-surface-tint text-on-primary font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-[0.98]"
+                          >
+                            <span className="material-symbols-outlined text-sm">check</span>
+                            <span>Accept</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onRejectInvitation && onRejectInvitation(inv._id)}
+                            className="flex-1 py-1.5 px-3 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-xs transition-all cursor-pointer flex items-center justify-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-sm">close</span>
+                            <span>Reject</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Standard Platform Notifications from MongoDB */}
               <div className="space-y-2.5 text-body-sm">
-                {notifications.length === 0 ? (
+                {notifications.length === 0 && (!pendingInvitations || pendingInvitations.length === 0) ? (
                   <div className="py-6 text-center text-on-surface-variant text-xs">
                     <span className="material-symbols-outlined text-2xl text-outline mb-1">notifications_none</span>
                     <p>No new notifications</p>
@@ -194,12 +251,30 @@ export default function Header({
 
         {/* Profile Avatar Button & Menu */}
         <div className="relative">
-          <img 
-            alt="Profile" 
+          <div 
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="w-8 h-8 rounded-full object-cover shadow-[0_1px_3px_rgba(15,23,42,0.08)] cursor-pointer hover:ring-2 hover:ring-secondary/40 transition-all" 
-            src={currentUser?.avatar || "https://lh3.googleusercontent.com/aida/AEtjO1U9z5PpV3Oif5HhhByVbwFRYk7HWVBiaoD0VNB5HJ0qL8NTgyV9zdv3Z0kb1LWlSYbxqz2J0ARPqkm6aWj8V5UZtnnkauBTB6e-Pvqfvt90EnUwriRM5A97Q9V9iZdlRCjtwercmGE3G05yZRlXzzCm7g9O5kGcUVghkc3NcvdMvplHHEzkzeKbC2NS5k3KzdHOvmlEJGz_SqF5Q0Kz5kl0mRpG_0NW8L5Hs51VIWTludWsf0Raog0dXhpSS-eK4_xEupfb60OG"}
-          />
+            className="cursor-pointer"
+          >
+            {currentUser?.avatar ? (
+              <img 
+                alt="" 
+                className="w-8 h-8 rounded-full object-cover shadow-xs hover:ring-2 hover:ring-secondary/40 transition-all" 
+                src={currentUser.avatar}
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) {
+                    e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }
+                }}
+              />
+            ) : null}
+            <div 
+              style={{ display: currentUser?.avatar ? 'none' : 'flex' }}
+              className="w-8 h-8 rounded-full bg-secondary/15 text-secondary font-bold text-xs items-center justify-center shadow-xs hover:ring-2 hover:ring-secondary/40 transition-all"
+            >
+              {(currentUser?.name || 'U').charAt(0).toUpperCase()}
+            </div>
+          </div>
 
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-64 bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-high p-3 z-50 animate-modal">

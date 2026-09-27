@@ -1,9 +1,12 @@
 import express from "express";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import { generateToken, authenticateUser } from "../middleware/auth.js";
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || "buildcrew_super_secret_jwt_key_2026_secure";
 
 // POST /api/auth/register - Register a new student
 router.post("/register", async (req, res) => {
@@ -35,6 +38,10 @@ router.post("/register", async (req, res) => {
 
     if (password.length < 6) {
       return res.status(400).json({ error: "Password must be at least 6 characters long." });
+    }
+
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ error: "Database is connecting. Please try again in a moment." });
     }
 
     // Check if user already exists
@@ -106,14 +113,111 @@ router.post("/login", async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const user = await User.findOne({ email: cleanEmail });
+    const cleanPassword = password.trim();
 
+    // Load admin credentials from .env
+    const admin1Email = (process.env.ADMIN1_EMAIL || "").trim().toLowerCase();
+    const admin1Password = (process.env.ADMIN1_PASSWORD || "").trim();
+    const admin2Email = (process.env.ADMIN2_EMAIL || "").trim().toLowerCase();
+    const admin2Password = (process.env.ADMIN2_PASSWORD || "").trim();
+
+    const isAdminMatch =
+      (admin1Email && cleanEmail === admin1Email && cleanPassword === admin1Password) ||
+      (admin2Email && cleanEmail === admin2Email && cleanPassword === admin2Password);
+
+    // If matches .env Admin credentials, authenticate with role: "admin"
+    if (isAdminMatch) {
+      const adminName = cleanEmail === admin1Email 
+        ? (process.env.ADMIN1_NAME || "Administrator") 
+        : (process.env.ADMIN2_NAME || "Administrator");
+      const adminRoleTitle = cleanEmail === admin1Email 
+        ? "Co-Founder & Platform Architect" 
+        : "Co-Founder & Lead Engineer";
+      const adminAvatar = "";
+
+      if (mongoose.connection.readyState === 1) {
+        try {
+          let dbAdmin = await User.findOne({ email: cleanEmail });
+          if (!dbAdmin) {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(cleanPassword, salt);
+            dbAdmin = await User.create({
+              name: adminName,
+              email: cleanEmail,
+              password: hashedPassword,
+              role: "admin",
+              roleTitle: adminRoleTitle,
+              college: "Stanford University",
+              university: "Stanford University",
+              branch: "Computer Science",
+              major: "Computer Science",
+              avatar: adminAvatar,
+              profileImage: adminAvatar,
+              bio: "BuildCrew Founder & Collegiate Platform Lead.",
+            });
+          } else {
+            let changed = false;
+            if (dbAdmin.role !== "admin") {
+              dbAdmin.role = "admin";
+              changed = true;
+            }
+            const isPwMatch = await bcrypt.compare(cleanPassword, dbAdmin.password);
+            if (!isPwMatch) {
+              const salt = await bcrypt.genSalt(10);
+              dbAdmin.password = await bcrypt.hash(cleanPassword, salt);
+              changed = true;
+            }
+            if (changed) {
+              await dbAdmin.save();
+            }
+          }
+
+          const token = generateToken(dbAdmin);
+          return res.json({
+            success: true,
+            token,
+            user: dbAdmin.toJSON(),
+          });
+        } catch (dbErr) {
+          console.warn("DB write warning during admin login:", dbErr.message);
+        }
+      }
+
+      // Fallback if DB is not ready yet
+      const fallbackAdmin = {
+        _id: "admin-founder-env",
+        id: "admin-founder-env",
+        name: adminName,
+        email: cleanEmail,
+        role: "admin",
+        roleTitle: adminRoleTitle,
+        college: "Stanford University",
+        university: "Stanford University",
+        branch: "Computer Science",
+        avatar: adminAvatar,
+        profileImage: adminAvatar,
+      };
+
+      const token = jwt.sign(fallbackAdmin, JWT_SECRET, { expiresIn: "7d" });
+      return res.json({
+        success: true,
+        token,
+        user: fallbackAdmin,
+      });
+    }
+
+    // Regular User Login
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ error: "Database is connecting. Please try again in a moment." });
+    }
+
+    const user = await User.findOne({ email: cleanEmail });
     if (!user) {
       return res.status(401).json({ error: "Invalid email or password." });
     }
 
     // Verify bcrypt password
-    const isMatch = await bcrypt.compare(password.trim(), user.password);
+    const isMatch = await bcrypt.compare(cleanPassword, user.password);
     if (!isMatch) {
       return res.status(401).json({ error: "Invalid email or password." });
     }
@@ -141,38 +245,83 @@ router.post("/google", async (req, res) => {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    let user = await User.findOne({ email: cleanEmail });
 
-    if (!user) {
-      // Auto-register student via Google
-      const salt = await bcrypt.genSalt(10);
-      const randomPassword = await bcrypt.hash(Math.random().toString(36).substring(2) + Date.now(), salt);
-      const displayName = name ? name.trim() : (cleanEmail.split("@")[0].replace(/[^a-zA-Z0-9]/g, " ") || "Student Builder");
+    // Check if Google account matches .env Admin credentials
+    const admin1Email = (process.env.ADMIN1_EMAIL || "").trim().toLowerCase();
+    const admin2Email = (process.env.ADMIN2_EMAIL || "").trim().toLowerCase();
+    const isAdmin = Boolean((admin1Email && cleanEmail === admin1Email) || (admin2Email && cleanEmail === admin2Email));
 
-      user = await User.create({
-        name: displayName,
-        email: cleanEmail,
-        password: randomPassword,
-        college: "Campus Member",
-        university: "Campus Member",
-        branch: "Engineering",
-        major: "Engineering",
-        semester: 1,
-        graduationYear: "2026",
-        year: "'26",
-        role: "student",
-        avatar: avatar || "https://lh3.googleusercontent.com/aida-public/AB6AXuBirUkNQSo04g_tpOZ4BCEqxhIS1X_JeuPCz7HOuaAg-iBZjD079_5Kw5JH_beVshiDR-hGgf25xxHWHIOiujBaIs-w4YI0ynogQcCH-ChPBSE6SQTry_Dqz24c73Jk7DeMfwiJy0dTYKPf4u-A8WVNw1oUjo6ssG1p_WKvOPmg1OVEotk4p7HgClGq2FLb6UoHwks2MTWuddYD2hBI5uOVcjsqA5gleuV5YGmocfJVn1MpOeHrvsPd",
+    const adminName = cleanEmail === admin1Email 
+      ? (process.env.ADMIN1_NAME || "Administrator") 
+      : (process.env.ADMIN2_NAME || "Administrator");
+    const adminRoleTitle = cleanEmail === admin1Email 
+      ? "Co-Founder & Platform Architect" 
+      : "Co-Founder & Lead Engineer";
+    const adminAvatar = "";
+
+    if (mongoose.connection.readyState === 1) {
+      let user = await User.findOne({ email: cleanEmail });
+
+      if (!user) {
+        const salt = await bcrypt.genSalt(10);
+        const randomPassword = await bcrypt.hash(Math.random().toString(36).substring(2) + Date.now(), salt);
+        const displayName = name ? name.trim() : (isAdmin ? adminName : (cleanEmail.split("@")[0].replace(/[^a-zA-Z0-9]/g, " ") || "Student Builder"));
+
+        user = await User.create({
+          name: displayName,
+          email: cleanEmail,
+          password: randomPassword,
+          college: isAdmin ? "Stanford University" : "Campus Member",
+          university: isAdmin ? "Stanford University" : "Campus Member",
+          branch: isAdmin ? "Computer Science" : "Engineering",
+          major: isAdmin ? "Computer Science" : "Engineering",
+          semester: 1,
+          graduationYear: "2026",
+          year: "'26",
+          role: isAdmin ? "admin" : "student",
+          roleTitle: isAdmin ? adminRoleTitle : "Student Builder",
+          avatar: avatar || (isAdmin ? adminAvatar : "https://lh3.googleusercontent.com/aida-public/AB6AXuBirUkNQSo04g_tpOZ4BCEqxhIS1X_JeuPCz7HOuaAg-iBZjD079_5Kw5JH_beVshiDR-hGgf25xxHWHIOiujBaIs-w4YI0ynogQcCH-ChPBSE6SQTry_Dqz24c73Jk7DeMfwiJy0dTYKPf4u-A8WVNw1oUjo6ssG1p_WKvOPmg1OVEotk4p7HgClGq2FLb6UoHwks2MTWuddYD2hBI5uOVcjsqA5gleuV5YGmocfJVn1MpOeHrvsPd"),
+          profileImage: avatar || (isAdmin ? adminAvatar : ""),
+        });
+      } else if (isAdmin && user.role !== "admin") {
+        user.role = "admin";
+        await user.save();
+      }
+
+      const token = generateToken(user);
+      return res.json({
+        success: true,
+        message: "Google sign-in successful",
+        token,
+        user: user.toJSON(),
       });
     }
 
-    const token = generateToken(user);
+    // Fallback if DB is connecting
+    if (isAdmin) {
+      const fallbackAdmin = {
+        _id: "admin-founder-env",
+        id: "admin-founder-env",
+        name: adminName,
+        email: cleanEmail,
+        role: "admin",
+        roleTitle: adminRoleTitle,
+        college: "Stanford University",
+        university: "Stanford University",
+        branch: "Computer Science",
+        avatar: adminAvatar,
+        profileImage: adminAvatar,
+      };
+      const token = jwt.sign(fallbackAdmin, JWT_SECRET, { expiresIn: "7d" });
+      return res.json({
+        success: true,
+        message: "Google sign-in successful (admin)",
+        token,
+        user: fallbackAdmin,
+      });
+    }
 
-    return res.json({
-      success: true,
-      message: "Google sign-in successful",
-      token,
-      user: user.toJSON(),
-    });
+    return res.status(503).json({ error: "Database is connecting. Please try again in a moment." });
   } catch (err) {
     console.error("Google auth error:", err);
     return res.status(500).json({ error: "Server error during Google login.", details: err.message });
@@ -235,9 +384,10 @@ router.post("/reset-password", async (req, res) => {
 // GET /api/auth/me - Verify session & fetch authenticated user
 router.get("/me", authenticateUser, async (req, res) => {
   try {
+    const userJson = req.user.toJSON ? req.user.toJSON() : req.user;
     return res.json({
       success: true,
-      user: req.user.toJSON(),
+      user: userJson,
     });
   } catch (err) {
     return res.status(500).json({ error: "Could not fetch user session." });

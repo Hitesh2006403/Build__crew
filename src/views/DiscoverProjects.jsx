@@ -36,6 +36,11 @@ export default function DiscoverProjects({
     setCurrentPage(1);
   };
 
+  // Derive unique real campuses dynamically from projects in MongoDB
+  const availableCampuses = useMemo(() => {
+    return Array.from(new Set(projects.map(p => p.campus).filter(Boolean)));
+  }, [projects]);
+
   // Filter & Sort logic
   const filteredProjects = useMemo(() => {
     let result = projects.filter(p => {
@@ -132,18 +137,22 @@ export default function DiscoverProjects({
           </p>
         </div>
 
-        {/* Crisp Metrics Pills */}
+        {/* Dynamic Metrics Pills */}
         <div className="flex items-center gap-2 self-start md:self-auto bg-surface-container-low p-1.5 rounded-xl text-xs font-medium text-on-surface">
           <div className="px-3 py-1.5 rounded-lg bg-surface-container-lowest shadow-xs text-center">
-            <span className="block font-bold text-base text-on-surface leading-tight">42</span>
+            <span className="block font-bold text-base text-on-surface leading-tight">{projects.length}</span>
             <span className="text-[11px] text-on-surface-variant">Live Squads</span>
           </div>
           <div className="px-3 py-1.5 rounded-lg bg-surface-container-lowest shadow-xs text-center">
-            <span className="block font-bold text-base text-secondary leading-tight">19</span>
+            <span className="block font-bold text-base text-secondary leading-tight">
+              {projects.filter(p => (p.openVacancies && p.openVacancies.length > 0) || (p.openRoles && p.openRoles.length > 0) || ((p.filledCount || 0) < (p.totalCapacity || 4))).length}
+            </span>
             <span className="text-[11px] text-on-surface-variant">Hiring Now</span>
           </div>
           <div className="px-3 py-1.5 rounded-lg bg-surface-container-lowest shadow-xs text-center">
-            <span className="block font-bold text-base text-on-surface leading-tight">94%</span>
+            <span className="block font-bold text-base text-on-surface leading-tight">
+              {projects.length > 0 ? '94%' : '0%'}
+            </span>
             <span className="text-[11px] text-on-surface-variant">Match Rate</span>
           </div>
         </div>
@@ -241,7 +250,7 @@ export default function DiscoverProjects({
               <select
                 value={techStackFilter}
                 onChange={(e) => { setTechStackFilter(e.target.value); setCurrentPage(1); }}
-                className="appearance-none bg-surface-container-low text-on-surface text-xs font-medium px-3 py-1.5 pr-6 rounded-lg cursor-pointer outline-none hover:bg-surface-container transition-all"
+                className="appearance-none bg-surface-container-low text-on-surface text-xs font-medium px-3 py-1.5 pr-7 rounded-lg cursor-pointer outline-none hover:bg-surface-container transition-all"
               >
                 <option value="">Stack: All</option>
                 <option value="react">React / React 19</option>
@@ -260,7 +269,7 @@ export default function DiscoverProjects({
               <select
                 value={roleFilter}
                 onChange={(e) => { setRoleFilter(e.target.value); setCurrentPage(1); }}
-                className="appearance-none bg-surface-container-low text-on-surface text-xs font-medium px-3 py-1.5 pr-6 rounded-lg cursor-pointer outline-none hover:bg-surface-container transition-all"
+                className="appearance-none bg-surface-container-low text-on-surface text-xs font-medium px-3 py-1.5 pr-7 rounded-lg cursor-pointer outline-none hover:bg-surface-container transition-all"
               >
                 <option value="">Role: All</option>
                 <option value="frontend">Frontend</option>
@@ -275,23 +284,23 @@ export default function DiscoverProjects({
             </div>
 
             {/* Campus Dropdown */}
-            <div className="relative">
-              <select
-                value={campusFilter}
-                onChange={(e) => { setCampusFilter(e.target.value); setCurrentPage(1); }}
-                className="appearance-none bg-surface-container-low text-on-surface text-xs font-medium px-3 py-1.5 pr-6 rounded-lg cursor-pointer outline-none hover:bg-surface-container transition-all"
-              >
-                <option value="">Campus: Any</option>
-                <option value="stanford">Stanford</option>
-                <option value="cmu">CMU</option>
-                <option value="mit">MIT</option>
-                <option value="berkeley">UC Berkeley</option>
-                <option value="iit">IIT</option>
-              </select>
-              <span className="material-symbols-outlined absolute right-1.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm pointer-events-none">
-                expand_more
-              </span>
-            </div>
+            {availableCampuses.length > 0 && (
+              <div className="relative">
+                <select
+                  value={campusFilter}
+                  onChange={(e) => { setCampusFilter(e.target.value); setCurrentPage(1); }}
+                  className="appearance-none bg-surface-container-low text-on-surface text-xs font-medium px-3 py-1.5 pr-7 rounded-lg cursor-pointer outline-none hover:bg-surface-container transition-all"
+                >
+                  <option value="">Campus: Any</option>
+                  {availableCampuses.map((c, idx) => (
+                    <option key={idx} value={c}>{c}</option>
+                  ))}
+                </select>
+                <span className="material-symbols-outlined absolute right-1.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-sm pointer-events-none">
+                  expand_more
+                </span>
+              </div>
+            )}
 
             {/* Reset Filter Button */}
             {hasActiveFilters && (
@@ -308,21 +317,28 @@ export default function DiscoverProjects({
         </div>
       </div>
 
-      {/* Projects Grid with Clean, Balanced Cards (No Information Overload) */}
       {paginatedProjects.length === 0 ? (
         <div className="bg-surface-container-lowest p-12 rounded-2xl text-center space-y-3 border border-surface-container-high/40">
-          <span className="material-symbols-outlined text-4xl text-outline">search_off</span>
-          <h3 className="font-headline-sm text-lg font-bold text-on-surface">No squads match your search criteria</h3>
+          <span className="material-symbols-outlined text-4xl text-outline">
+            {projects.length === 0 ? 'folder_open' : 'search_off'}
+          </span>
+          <h3 className="font-headline-sm text-lg font-bold text-on-surface">
+            {projects.length === 0 ? 'No squads registered yet' : 'No squads match your search criteria'}
+          </h3>
           <p className="font-body-md text-sm text-on-surface-variant max-w-md mx-auto">
-            Try broadening your search term or clearing one of the role / stack filters.
+            {projects.length === 0
+              ? 'Be the first to post a collegiate project squad and recruit teammates from your campus!'
+              : 'Try broadening your search term or clearing one of the role / stack filters.'}
           </p>
-          <button
-            type="button"
-            onClick={handleResetFilters}
-            className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-title-sm text-xs font-semibold transition-all inline-block mt-2 cursor-pointer"
-          >
-            Reset All Filters
-          </button>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-title-sm text-xs font-semibold transition-all inline-block mt-2 cursor-pointer"
+            >
+              Reset All Filters
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -413,17 +429,33 @@ export default function DiscoverProjects({
                   <div className="flex items-center justify-between">
                     {/* Lead */}
                     <div className="flex items-center gap-2 min-w-0">
-                      <img
-                        src={project.lead?.avatar}
-                        alt={project.lead?.name}
-                        className="w-7 h-7 rounded-full object-cover shrink-0"
-                      />
+                      <div className="relative shrink-0">
+                        {project.lead?.avatar ? (
+                          <img
+                            src={project.lead.avatar}
+                            alt=""
+                            className="w-7 h-7 rounded-full object-cover shrink-0"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              if (e.currentTarget.nextElementSibling) {
+                                e.currentTarget.nextElementSibling.style.display = 'flex';
+                              }
+                            }}
+                          />
+                        ) : null}
+                        <div 
+                          style={{ display: project.lead?.avatar ? 'none' : 'flex' }}
+                          className="w-7 h-7 rounded-full bg-secondary/15 text-secondary font-bold text-xs items-center justify-center shrink-0"
+                        >
+                          {(project.lead?.name || 'L').charAt(0).toUpperCase()}
+                        </div>
+                      </div>
                       <div className="flex flex-col min-w-0">
                         <span className="text-xs font-semibold text-on-surface truncate leading-tight">
-                          {project.lead?.name}
+                          {project.lead?.name || 'Squad Lead'}
                         </span>
                         <span className="text-[11px] text-on-surface-variant truncate leading-tight">
-                          {project.lead?.university}
+                          {project.lead?.university || 'Campus Member'}
                         </span>
                       </div>
                     </div>

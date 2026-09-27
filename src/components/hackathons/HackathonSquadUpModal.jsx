@@ -31,11 +31,11 @@ export default function HackathonSquadUpModal({
 
   // Filter squads relevant to this hackathon
   const hackathonTeams = projects.filter(p => {
-    const titleMatch = p.categoryBadge?.toLowerCase().includes(hackathon.title.toLowerCase().split(' ')[0].toLowerCase());
-    const hackNovaMatch = (hackathon._id || hackathon.id || '').includes('hacknova') && (p.categoryBadge?.includes('HackNova') || p.id === 'studysync-ai');
-    const treeHacksMatch = (hackathon._id || hackathon.id || '').includes('treehacks') && (p.categoryBadge?.includes('TreeHacks') || p.id === 'studysync-ai');
-    return titleMatch || hackNovaMatch || treeHacksMatch || true;
-  }).slice(0, 4);
+    const hackKey = (hackathon.title || '').toLowerCase().split(' ')[0];
+    const cat = (p.categoryBadge || '').toLowerCase();
+    const titleMatch = hackKey && cat.includes(hackKey);
+    return titleMatch || p.type === 'hackathon';
+  });
 
   const handleApply = (team) => {
     const teamId = team._id || team.id;
@@ -87,18 +87,18 @@ export default function HackathonSquadUpModal({
         urgency: 'high',
         matchScore: 98,
         publishedTime: 'Just now',
-        image: hackathon.heroImage || hackathon.coverImage || 'https://lh3.googleusercontent.com/aida-public/AB6AXuBjbkVkD8ugQCopgjlKUdX6h2t7iGR8U7cAotGEX4gkVp2iZGYgNXuhDd7uv8XKPdDKxRc5LVG5-2ku_w-inG49pGRXEBeatfaGIbtDqTB4GZbf-12sVHdMJBR4s9dSwOvIgdwjHPZxHAYY6iul7GnOXO1wqM8s9NQjaFCIpekgajipka8rL8aNXyl4sNuZ5jWKKChl91y1bgaayoCYgzuMAvhhpxODIRFzAx9FdSUbydfyLDzrLu9E',
+        image: hackathon.heroImage || hackathon.coverImage || '',
         imageTag: selectedTrack || 'Hackathon Sprint',
         techStack: ['React', 'FastAPI', 'Python', 'Tailwind'],
         rolesNeeded: rolesNeeded.split(',').map(r => r.trim()).filter(Boolean),
-        campus: currentUser?.campus || currentUser?.university || 'stanford',
+        campus: currentUser?.college || currentUser?.university || currentUser?.campus || '',
         filledCount: 1,
         totalCapacity: 4,
         lead: {
           name: currentUser?.name || 'Student Builder',
-          university: currentUser?.university || currentUser?.college || 'Collegiate Campus',
+          university: currentUser?.college || currentUser?.university || '',
           roleTitle: currentUser?.roleTitle || 'Squad Creator',
-          avatar: currentUser?.avatar || currentUser?.profileImage || 'https://lh3.googleusercontent.com/aida-public/AB6AXuBirUkNQSo04g_tpOZ4BCEqxhIS1X_JeuPCz7HOuaAg-iBZjD079_5Kw5JH_beVshiDR-hGgf25xxHWHIOiujBaIs-w4YI0ynogQcCH-ChPBSE6SQTry_Dqz24c73Jk7DeMfwiJy0dTYKPf4u-A8WVNw1oUjo6ssG1p_WKvOPmg1OVEotk4p7HgClGq2FLb6UoHwks2MTWuddYD2hBI5uOVcjsqA5gleuV5YGmocfJVn1MpOeHrvsPd'
+          avatar: currentUser?.avatar || currentUser?.profileImage || ''
         },
         openVacancies: rolesNeeded.split(',').map((r, i) => ({
           id: `vac-${i}`,
@@ -257,11 +257,27 @@ export default function HackathonSquadUpModal({
                       className="p-3.5 rounded-2xl bg-surface-container-low border border-surface-container-high flex flex-col justify-between space-y-3"
                     >
                       <div className="flex items-start gap-3">
-                        <img
-                          src={builder.avatar}
-                          alt={builder.name}
-                          className="w-10 h-10 rounded-full object-cover ring-1 ring-secondary/30 shrink-0"
-                        />
+                        <div className="relative shrink-0">
+                          {builder.avatar ? (
+                            <img
+                              src={builder.avatar}
+                              alt=""
+                              className="w-10 h-10 rounded-full object-cover ring-1 ring-secondary/30 shrink-0"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                if (e.currentTarget.nextElementSibling) {
+                                  e.currentTarget.nextElementSibling.style.display = 'flex';
+                                }
+                              }}
+                            />
+                          ) : null}
+                          <div 
+                            style={{ display: builder.avatar ? 'none' : 'flex' }}
+                            className="w-10 h-10 rounded-full bg-secondary/15 text-secondary font-bold text-sm items-center justify-center ring-1 ring-secondary/30 shrink-0"
+                          >
+                            {(builder.name || 'B').charAt(0).toUpperCase()}
+                          </div>
+                        </div>
                         <div className="min-w-0">
                           <h4 className="font-bold text-xs sm:text-sm text-on-surface truncate">
                             {builder.name}
@@ -318,59 +334,76 @@ export default function HackathonSquadUpModal({
                 <span className="text-secondary font-bold">Request to Join</span>
               </div>
 
-              <div className="space-y-3">
-                {hackathonTeams.map((team) => {
-                  const isApplied = appliedTeams[team.id];
-                  return (
-                    <div
-                      key={team.id}
-                      className="p-4 rounded-2xl bg-surface-container-low border border-surface-container-high flex flex-col sm:flex-row sm:items-center justify-between gap-3.5"
-                    >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-title-md font-black text-on-surface">
-                            {team.title}
-                          </h4>
-                          <span className="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[10px] font-extrabold">
-                            {team.filledCount || 2}/{team.totalCapacity || 4} Members
-                          </span>
-                        </div>
-                        <p className="text-xs text-on-surface-variant leading-relaxed max-w-xl">
-                          {team.tagline}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                          {team.techStack?.slice(0, 4).map((tech, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2 py-0.5 rounded-md bg-surface-container text-on-surface text-[10px] font-semibold"
-                            >
-                              {tech}
+              {hackathonTeams.length === 0 ? (
+                <div className="py-10 text-center text-on-surface-variant space-y-2.5 bg-surface-container-low rounded-2xl border border-surface-container-high/50">
+                  <span className="material-symbols-outlined text-4xl text-outline">groups</span>
+                  <p className="font-semibold text-sm text-on-surface">No squads formed for this hackathon yet</p>
+                  <p className="text-xs text-on-surface-variant max-w-sm mx-auto">
+                    Switch to "+ Create Team" to register the first squad and start recruiting teammates.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('create')}
+                    className="mt-2 px-4 py-2 rounded-xl bg-primary text-on-primary text-xs font-bold shadow-xs hover:bg-surface-tint cursor-pointer"
+                  >
+                    + Create First Team
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {hackathonTeams.map((team) => {
+                    const isApplied = appliedTeams[team.id];
+                    return (
+                      <div
+                        key={team.id}
+                        className="p-4 rounded-2xl bg-surface-container-low border border-surface-container-high flex flex-col sm:flex-row sm:items-center justify-between gap-3.5"
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-title-md font-black text-on-surface">
+                              {team.title}
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[10px] font-extrabold">
+                              {team.filledCount || 1}/{team.totalCapacity || 4} Members
                             </span>
-                          ))}
+                          </div>
+                          <p className="text-xs text-on-surface-variant leading-relaxed max-w-xl">
+                            {team.tagline}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                            {team.techStack?.slice(0, 4).map((tech, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2 py-0.5 rounded-md bg-surface-container text-on-surface text-[10px] font-semibold"
+                              >
+                                {tech}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                          <button
+                            type="button"
+                            disabled={isApplied}
+                            onClick={() => handleApply(team)}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                              isApplied
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-primary hover:bg-surface-tint text-on-primary shadow-xs'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-sm">
+                              {isApplied ? 'done_all' : 'group_add'}
+                            </span>
+                            <span>{isApplied ? 'Requested' : 'Join Team'}</span>
+                          </button>
                         </div>
                       </div>
-
-                      <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
-                        <button
-                          type="button"
-                          disabled={isApplied}
-                          onClick={() => handleApply(team)}
-                          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                            isApplied
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-primary hover:bg-surface-tint text-on-primary shadow-xs'
-                          }`}
-                        >
-                          <span className="material-symbols-outlined text-sm">
-                            {isApplied ? 'done_all' : 'group_add'}
-                          </span>
-                          <span>{isApplied ? 'Requested' : 'Join Team'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -393,7 +426,7 @@ export default function HackathonSquadUpModal({
                   required
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
-                  placeholder="e.g. Stanford AI Innovators"
+                  placeholder="e.g. Campus Innovators"
                   className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-transparent focus:border-secondary focus:bg-surface-container-lowest text-xs sm:text-sm text-on-surface outline-none transition-all font-medium"
                 />
               </div>

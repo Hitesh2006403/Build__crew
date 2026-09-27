@@ -9,6 +9,9 @@ const router = express.Router();
 // GET /api/teams - Get teams for user's projects or where user is member
 router.get("/", authenticateUser, async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.json([]);
+    }
     const teams = await Team.find({
       $or: [{ owner: req.user._id }, { members: req.user._id }],
     })

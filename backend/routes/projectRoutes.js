@@ -8,6 +8,9 @@ const router = express.Router();
 // GET /api/projects - Search and retrieve projects from MongoDB
 router.get("/", async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.json([]);
+    }
     const { search, category, campus, role } = req.query;
     const query = {};
 

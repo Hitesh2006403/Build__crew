@@ -1,125 +1,126 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 
-const DEFAULT_AVATARS = [
-  {
-    id: 'avatar-1',
-    label: 'Alex R.',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBirUkNQSo04g_tpOZ4BCEqxhIS1X_JeuPCz7HOuaAg-iBZjD079_5Kw5JH_beVshiDR-hGgf25xxHWHIOiujBaIs-w4YI0ynogQcCH-ChPBSE6SQTry_Dqz24c73Jk7DeMfwiJy0dTYKPf4u-A8WVNw1oUjo6ssG1p_WKvOPmg1OVEotk4p7HgClGq2FLb6UoHwks2MTWuddYD2hBI5uOVcjsqA5gleuV5YGmocfJVn1MpOeHrvsPd'
-  },
-  {
-    id: 'avatar-2',
-    label: 'Rahul S.',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBnmEZNtZGZBJt86mDapjBMA0jOqw7hClt5LtW8N3lZ1PQ1ZC9mxCwRPM0ZfJRe8FPjziwi8z-_eN14d36A7R-ixuMvlxN0uo5C1tIcO3PKyrDcVXCOAHrzgD10dDNX-1ahjrVulehRiTbJcd-o8XWvwMCQ-wXRLPvIzrI5cQ5jr2JctNHGF-GIFCXFEKkq3h6Ubriud652-Lvq5GUFgOVhef4OgN8z8bnkWKXgL3usgFpNzAG4LBHY'
-  },
-  {
-    id: 'avatar-3',
-    label: 'Sarah J.',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAQ4L7we6LwbEsUj0RFqsg_rHzUjOuupTLlSo7mO7Spl-y4GdefKVfGecoaKgcF0XJ1VvW2j45ctDUZ4nxXbPfiJJNw2MKtCGo_xrr7hn7AOUc3pwPcQQ9uK4oE0mGO8B9rNXJKD3s9DSXWfXNllo9tyj-c7PYNiG7UJXRc2V8LVJhPAxT9LHLBLOqOGmkOAPdjqZt_WY66eWyYy_R9PMmoU7Jw-0bJD9sgc_70JjzrkZygUQ_mUfLB'
-  },
-  {
-    id: 'avatar-4',
-    label: 'Praveen K.',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBCM4VJ_y3eQXx_ZHkdkypEkb7yiKToP7XJhWP_YDFlZfxGJ3MN3udbXoX2FRhx3dPmQ-yEZqmNebAKWJ2h-grRjGY_of0K2uTM7Rok4fj5vO6Wj8jTyql1s2JZDvTJ5Q-jxt9ivZlV-bmHx6XBuaV01dsed81fwl7nVCB0T-4u31a-tkPM2tapPgPF3vFcTY3wg4K8hcQrf0I7v4NTXkQxco37OGKfcQ9quJb_twlg0XiCwWPYsXe_'
-  },
-  {
-    id: 'avatar-5',
-    label: 'David K.',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCBnDqHq7n8m_K6j4eGKbfcjul0Rdr1QG5Ai8saCMYCXkObI8mE9oih96TixdnmcMXtFEQlqlJewoM56m3xVQh80IrQnjI75C0okcQgPtX5VRLyQyG1xncpm5xM1SIeGzIhdLzcGFIWr8ybJVxQlX3eAktW5BI5tcsgx9mTd85e_M5KIx3k4DKPbO4vVPaoJaaSIwqtLbYIOZafGhQxDeE9kN9GO3OSsDJWyLRvcTHafkjcPmV0Rs2I'
-  },
-  {
-    id: 'avatar-6',
-    label: 'Maya C.',
-    url: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDj8rfKgKGYJOxl-peX0YLvOw6ySeIhn0XjE0cX3j7Pea0oBM1HHLCSYm-k4lm5vWUqCF1VtVwXY0QESMoDaSSF9tk9aQWB0T3D2BZDM6Ezy_23eymF3i6G6fes0oJ3aEM1-5XWifWl_PNo-39urmN5Q8g2NLDqQ2Lv6TE46GTEVc1EzdkGgpKT8Lge4aiJw7Uny0uDg47QiOKXP2wcPXRP3iufmQ9sldhgwMnZhOUilqmfFcPuoxbX'
-  }
-];
-
-export default function FindBuilders({ builders, onInvite, onAddBuilder, onViewProfile, showToast }) {
+export default function FindBuilders({ 
+  builders = [], 
+  projects = [], 
+  hackathonSquads = [], 
+  pendingInvitations = [], 
+  onInvite, 
+  onViewProfile, 
+  showToast, 
+  currentUser 
+}) {
   const [search, setSearch] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
-  const [invitedMap, setInvitedMap] = useState({});
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [selectedBuilderForInvite, setSelectedBuilderForInvite] = useState(null);
+  const [selectedSquadTarget, setSelectedSquadTarget] = useState('');
+  const [inviteRole, setInviteRole] = useState('Core Contributor');
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
 
-  // New Builder Form State
-  const [newName, setNewName] = useState('');
-  const [newRole, setNewRole] = useState('Fullstack Developer');
-  const [newUniversity, setNewUniversity] = useState('Stanford CS');
-  const [newYear, setNewYear] = useState("'26");
-  const [newLookingFor, setNewLookingFor] = useState('Seeking hackathon team for high-impact AI/systems tracks');
-  const [newSkillsInput, setNewSkillsInput] = useState('React, Python, Node.js');
-  const [newAvatar, setNewAvatar] = useState(DEFAULT_AVATARS[0].url);
+  // Available squads that currentUser leads or is a member of
+  const myAvailableSquads = [
+    ...projects
+      .filter(p => {
+        if (!currentUser) return false;
+        const isOwner = (p.createdBy?._id || p.createdBy) === currentUser._id;
+        const isMember = Array.isArray(p.members) && p.members.some(m => (m._id || m) === currentUser._id);
+        return isOwner || isMember;
+      })
+      .map(p => ({
+        id: p._id || p.id,
+        title: p.title,
+        type: 'project',
+        filledCount: p.filledCount || (p.members?.length || 1),
+        totalCapacity: p.totalCapacity || 4
+      })),
+    ...hackathonSquads
+      .filter(h => {
+        if (!currentUser) return false;
+        const isOwner = (h.createdBy?._id || h.createdBy) === currentUser._id;
+        const isMember = Array.isArray(h.members) && h.members.some(m => (m._id || m) === currentUser._id);
+        return isOwner || isMember;
+      })
+      .map(h => ({
+        id: h._id || h.id,
+        title: h.teamName || h.title || 'Hackathon Squad',
+        type: 'hackathon',
+        filledCount: h.filledCount || (h.members?.length || 1),
+        totalCapacity: h.totalCapacity || 4
+      }))
+  ];
 
-  const fileInputRef = useRef(null);
-
-  const handleAvatarFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result;
-      if (typeof base64 === 'string') {
-        setNewAvatar(base64);
-      }
-    };
-    reader.readAsDataURL(file);
+  const handleOpenInviteModal = (builder) => {
+    if (!currentUser) {
+      if (showToast) showToast('Please sign in to invite teammates.');
+      return;
+    }
+    if (builder._id === currentUser._id) {
+      if (showToast) showToast('You cannot invite yourself to a team.');
+      return;
+    }
+    setSelectedBuilderForInvite(builder);
+    if (myAvailableSquads.length > 0) {
+      setSelectedSquadTarget(myAvailableSquads[0].id);
+    }
+    setInviteRole('Core Contributor');
+    setInviteMessage(`Hey ${builder.name?.split(' ')[0] || 'there'}, join our squad on BuildCrew!`);
   };
 
-  const handleCreateBuilderSubmit = (e) => {
+  const handleSendInviteSubmit = async (e) => {
     e.preventDefault();
-    if (!newName.trim()) return;
+    if (!selectedBuilderForInvite) return;
 
-    const skillsArr = newSkillsInput
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const newBuilder = {
-      id: `builder-${Date.now()}`,
-      name: newName.trim(),
-      role: newRole.trim() || 'Software Engineer',
-      university: newUniversity.trim() || 'Collegiate Member',
-      year: newYear.trim() || "'26",
-      avatar: newAvatar || DEFAULT_AVATARS[0].url,
-      match: '96% Match',
-      lookingFor: newLookingFor.trim() || 'Seeking active squad for upcoming hackathon sprint',
-      skills: skillsArr.length > 0 ? skillsArr : ['Fullstack', 'React', 'Node.js']
-    };
-
-    if (onAddBuilder) {
-      onAddBuilder(newBuilder);
+    const chosenSquad = myAvailableSquads.find(s => String(s.id) === String(selectedSquadTarget));
+    if (!chosenSquad) {
+      if (showToast) showToast('Please select a squad to invite this builder to.');
+      return;
     }
 
-    // Reset form
-    setNewName('');
-    setNewRole('Fullstack Developer');
-    setNewSkillsInput('React, Python, Node.js');
-    setNewLookingFor('Seeking hackathon team for high-impact AI/systems tracks');
-    setNewAvatar(DEFAULT_AVATARS[0].url);
-    setIsAddModalOpen(false);
-  };
-
-  const handleInviteClick = (builder) => {
-    const bId = builder._id || builder.id;
-    setInvitedMap(prev => ({ ...prev, [bId]: true }));
-    if (onInvite) onInvite(builder);
+    try {
+      setIsSendingInvite(true);
+      if (onInvite) {
+        await onInvite({
+          receiverId: selectedBuilderForInvite._id || selectedBuilderForInvite.id,
+          projectId: chosenSquad.type === 'project' ? chosenSquad.id : undefined,
+          hackathonTeamId: chosenSquad.type === 'hackathon' ? chosenSquad.id : undefined,
+          type: chosenSquad.type,
+          role: inviteRole.trim() || 'Core Contributor',
+          message: inviteMessage.trim() || `Join our squad on BuildCrew!`
+        });
+      }
+      setSelectedBuilderForInvite(null);
+    } catch (err) {
+      console.error('Error dispatching invitation:', err);
+    } finally {
+      setIsSendingInvite(false);
+    }
   };
 
   const filteredBuilders = builders.filter(b => {
+    // Hide current logged in user from teammates discovery if desired, or allow viewing profile
     const bName = b.name || '';
-    const bUniv = b.university || b.college || '';
+    const bCollege = b.college || b.university || '';
+    const bBranch = b.branch || b.major || '';
     const bRole = b.roleTitle || b.role || '';
     const bSkills = Array.isArray(b.skills) ? b.skills : [];
 
     if (search.trim()) {
       const q = search.toLowerCase();
       const match = bName.toLowerCase().includes(q) ||
-                    bUniv.toLowerCase().includes(q) ||
+                    bCollege.toLowerCase().includes(q) ||
+                    bBranch.toLowerCase().includes(q) ||
                     bSkills.some(s => s.toLowerCase().includes(q));
       if (!match) return false;
     }
+
     if (selectedRole !== 'all') {
-      if (!bRole.toLowerCase().includes(selectedRole.toLowerCase())) return false;
+      const targetRole = selectedRole.toLowerCase();
+      const matchesRole = bRole.toLowerCase().includes(targetRole) ||
+                          bSkills.some(s => s.toLowerCase().includes(targetRole));
+      if (!matchesRole) return false;
     }
+
     return true;
   });
 
@@ -135,19 +136,8 @@ export default function FindBuilders({ builders, onInvite, onAddBuilder, onViewP
             Find Campus Teammates
           </h1>
           <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-            Scout verified student engineers, designers, and researchers seeking squads for upcoming hackathons.
+            Scout real registered student engineers, designers, and researchers seeking squads for upcoming hackathons.
           </p>
-        </div>
-
-        <div>
-          <button
-            type="button"
-            onClick={() => setIsAddModalOpen(true)}
-            className="px-5 py-2.5 rounded-xl bg-primary hover:bg-surface-tint text-on-primary font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer inline-flex items-center gap-2 active:scale-[0.98]"
-          >
-            <span className="material-symbols-outlined text-lg">person_add</span>
-            <span>+ Add Worker / Builder</span>
-          </button>
         </div>
       </div>
 
@@ -161,25 +151,25 @@ export default function FindBuilders({ builders, onInvite, onAddBuilder, onViewP
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search builders by name, skill, university..."
+            placeholder="Search builders by name, skill, college, branch..."
             className="w-full pl-10 pr-4 py-2.5 bg-surface text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm rounded-xl outline-none focus:bg-surface-container-lowest shadow-sm transition-all"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
           <button
             type="button"
             onClick={() => setSelectedRole('all')}
-            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
               selectedRole === 'all' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
             }`}
           >
-            All Builders
+            All Students
           </button>
           <button
             type="button"
             onClick={() => setSelectedRole('backend')}
-            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
               selectedRole === 'backend' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
             }`}
           >
@@ -188,7 +178,7 @@ export default function FindBuilders({ builders, onInvite, onAddBuilder, onViewP
           <button
             type="button"
             onClick={() => setSelectedRole('frontend')}
-            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
               selectedRole === 'frontend' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
             }`}
           >
@@ -196,106 +186,170 @@ export default function FindBuilders({ builders, onInvite, onAddBuilder, onViewP
           </button>
           <button
             type="button"
-            onClick={() => setSelectedRole('zk')}
-            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer ${
-              selectedRole === 'zk' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+            onClick={() => setSelectedRole('ai')}
+            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
+              selectedRole === 'ai' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
             }`}
           >
-            Web3 / ZK
+            AI / ML
           </button>
         </div>
       </div>
 
       {/* Grid of Builder Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-space-md">
-        {filteredBuilders.map((b) => (
-          <div
-            key={b._id || b.id}
-            className="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4"
-          >
-            <div className="flex items-start gap-space-sm">
-              <img
-                src={b.avatar}
-                alt={b.name}
-                className="w-14 h-14 rounded-2xl object-cover shadow-sm shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-title-md text-title-md font-bold text-on-surface truncate">
-                    {b.name}
-                  </h3>
-                  <span className="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
-                    {b.match}
-                  </span>
-                </div>
-                <div className="font-body-sm text-body-sm text-secondary font-medium">
-                  {b.role}
-                </div>
-                <div className="font-label-sm text-label-sm text-on-surface-variant">
-                  {b.university} · {b.year}
-                </div>
-              </div>
-            </div>
-
-            <div className="p-2.5 rounded-xl bg-surface-container-low text-body-sm text-on-surface-variant">
-              <span className="font-semibold text-on-surface block text-label-sm uppercase tracking-wider mb-1">
-                Target Objective:
-              </span>
-              {b.lookingFor}
-            </div>
-
-            <div>
-              <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider block mb-1.5">
-                Verified Skill Set:
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {b.skills.map((skill, sidx) => (
-                  <span
-                    key={sidx}
-                    className="px-2.5 py-0.5 rounded-md bg-surface-container-high text-on-surface font-label-sm text-label-sm"
-                  >
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-space-xs border-t border-surface-container-low flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => onViewProfile ? onViewProfile(b._id || b.id) : null}
-                className="py-2 px-3 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-title-sm text-title-sm transition-all cursor-pointer"
-              >
-                View Profile
-              </button>
-              <button
-                type="button"
-                onClick={() => handleInviteClick(b)}
-                disabled={invitedMap[b._id || b.id]}
-                className={`py-2 px-4 rounded-xl font-title-sm text-title-sm transition-all flex items-center gap-1 cursor-pointer ${
-                  invitedMap[b._id || b.id]
-                    ? 'bg-surface-container text-secondary font-semibold'
-                    : 'bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98]'
-                }`}
-              >
-                <span className="material-symbols-outlined text-base">
-                  {invitedMap[b._id || b.id] ? 'check' : 'person_add'}
-                </span>
-                <span>{invitedMap[b._id || b.id] ? 'Invited' : 'Invite to Squad'}</span>
-              </button>
-            </div>
+        {filteredBuilders.length === 0 ? (
+          <div className="col-span-full bg-surface-container-lowest p-12 rounded-2xl text-center space-y-3 border border-surface-container-high/40">
+            <span className="material-symbols-outlined text-4xl text-outline">group_off</span>
+            <h3 className="font-headline-sm text-lg font-bold text-on-surface">No registered students found</h3>
+            <p className="font-body-md text-sm text-on-surface-variant max-w-md mx-auto">
+              Try adjusting your search query or role filter to discover more builders.
+            </p>
           </div>
-        ))}
+        ) : (
+          filteredBuilders.map((b) => {
+            const isSelf = currentUser && String(b._id || b.id) === String(currentUser._id);
+            const avatarImg = b.avatar || b.profileImage;
+            const collegeName = b.college || b.university || '';
+            const branchName = b.branch || b.major || '';
+            const semesterText = b.semester ? `Semester ${b.semester}` : (b.year ? `Class of ${b.year}` : '');
+            const hasSkills = Array.isArray(b.skills) && b.skills.length > 0;
+            const hasBio = Boolean(b.bio && b.bio.trim());
+
+            return (
+              <div
+                key={b._id || b.id}
+                className="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 border border-surface-container-high/40"
+              >
+                <div className="space-y-3">
+                  {/* Top user header */}
+                  <div className="flex items-start gap-space-sm">
+                    <div className="relative shrink-0">
+                      {avatarImg ? (
+                        <img
+                          src={avatarImg}
+                          alt=""
+                          className="w-14 h-14 rounded-2xl object-cover shadow-sm shrink-0"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                            if (e.currentTarget.nextElementSibling) {
+                              e.currentTarget.nextElementSibling.style.display = 'flex';
+                            }
+                          }}
+                        />
+                      ) : null}
+                      <div 
+                        style={{ display: avatarImg ? 'none' : 'flex' }}
+                        className="w-14 h-14 rounded-2xl bg-secondary/15 text-secondary font-bold text-xl items-center justify-center shadow-sm shrink-0"
+                      >
+                        {(b.name || 'S').charAt(0).toUpperCase()}
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-title-md text-title-md font-bold text-on-surface truncate">
+                          {b.name}
+                        </h3>
+                        {isSelf ? (
+                          <span className="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-label-sm text-[11px] font-bold">
+                            You
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="font-body-sm text-body-sm text-secondary font-semibold">
+                        {b.roleTitle || b.role || 'Student Builder'}
+                      </div>
+                      {collegeName && (
+                        <div className="font-label-sm text-label-sm text-on-surface-variant truncate">
+                          {collegeName} {branchName ? `· ${branchName}` : ''}
+                        </div>
+                      )}
+                      {!collegeName && branchName && (
+                        <div className="font-label-sm text-label-sm text-on-surface-variant truncate">
+                          {branchName}
+                        </div>
+                      )}
+                      {semesterText && (
+                        <div className="text-[11px] text-outline font-medium">
+                          {semesterText}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* GitHub & Profile Links if present */}
+                  {b.github && (
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={b.github.startsWith('http') ? b.github : `https://${b.github}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-secondary hover:text-primary font-semibold transition-colors"
+                      >
+                        <span className="material-symbols-outlined text-sm">code</span>
+                        <span>GitHub Profile</span>
+                        <span className="material-symbols-outlined text-[10px]">arrow_outward</span>
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Bio snippet if present */}
+                  {hasBio && (
+                    <p className="text-xs text-on-surface-variant line-clamp-2 leading-relaxed italic bg-surface-container-low/50 p-2 rounded-xl">
+                      "{b.bio}"
+                    </p>
+                  )}
+
+                  {/* Skills badges if present */}
+                  {hasSkills && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {b.skills.map((skill, sidx) => (
+                        <span
+                          key={sidx}
+                          className="px-2.5 py-0.5 rounded-md bg-surface-container-high text-on-surface font-label-sm text-label-sm font-medium"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Card Action Footer */}
+                <div className="pt-space-xs border-t border-surface-container-low flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onViewProfile ? onViewProfile(b._id || b.id) : null}
+                    className="py-2 px-3 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-title-sm text-title-sm transition-all cursor-pointer"
+                  >
+                    View Profile
+                  </button>
+
+                  {!isSelf && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenInviteModal(b)}
+                      className="py-2 px-4 rounded-xl font-title-sm text-title-sm bg-primary text-on-primary hover:bg-surface-tint active:scale-[0.98] transition-all flex items-center gap-1 cursor-pointer shadow-xs"
+                    >
+                      <span className="material-symbols-outlined text-base">person_add</span>
+                      <span>Invite to Team</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
-      {/* Add Worker / Builder Modal */}
-      {isAddModalOpen && (
+      {/* Real Invite to Team Modal */}
+      {selectedBuilderForInvite && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md animate-fadeIn"
-          onClick={() => setIsAddModalOpen(false)}
+          onClick={() => setSelectedBuilderForInvite(null)}
         >
           <div 
-            className="relative w-full max-w-xl bg-surface-container-lowest rounded-3xl shadow-2xl border border-surface-container-high overflow-hidden animate-modal"
+            className="relative w-full max-w-lg bg-surface-container-lowest rounded-3xl shadow-2xl border border-surface-container-high overflow-hidden animate-modal"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -303,189 +357,108 @@ export default function FindBuilders({ builders, onInvite, onAddBuilder, onViewP
               <div>
                 <div className="flex items-center gap-1.5 text-xs text-blue-300 font-bold uppercase tracking-wider mb-1">
                   <span className="material-symbols-outlined text-sm">person_add</span>
-                  <span>Talent Directory</span>
+                  <span>Dispatch Invitation</span>
                 </div>
-                <h3 className="text-xl font-bold tracking-tight">Add Worker / Builder</h3>
+                <h3 className="text-xl font-bold tracking-tight">
+                  Invite {selectedBuilderForInvite.name}
+                </h3>
                 <p className="text-xs text-slate-300 mt-0.5">
-                  Register a verified student builder to the collegiate matchmaking pool.
+                  Send a formal team invitation through BuildCrew and MongoDB.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => setIsAddModalOpen(false)}
+                onClick={() => setSelectedBuilderForInvite(null)}
                 className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white/80 hover:text-white flex items-center justify-center transition-all cursor-pointer"
               >
                 <span className="material-symbols-outlined text-base">close</span>
               </button>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleCreateBuilderSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto text-sm">
-              <div>
-                <label className="text-xs font-bold uppercase text-outline block mb-1">
-                  Full Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Alex Rivera, Devika S..."
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold uppercase text-outline block mb-1">
-                    Primary Role / Specialization *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Fullstack Developer, AI Researcher..."
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold uppercase text-outline block mb-1">
-                    University / College &amp; Year
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="e.g. Stanford CS"
-                      value={newUniversity}
-                      onChange={(e) => setNewUniversity(e.target.value)}
-                      className="flex-1 px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all"
-                    />
-                    <input
-                      type="text"
-                      placeholder="'26"
-                      value={newYear}
-                      onChange={(e) => setNewYear(e.target.value)}
-                      className="w-20 px-3 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm text-center transition-all"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold uppercase text-outline block mb-1">
-                  Target Objective / Squad Goal
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="e.g. Seeking high-intensity squad for TreeHacks systems track or AI track..."
-                  value={newLookingFor}
-                  onChange={(e) => setNewLookingFor(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold uppercase text-outline block mb-1">
-                  Verified Skills (comma separated)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. React 19, Python, FastAPI, Tailwind, PyTorch"
-                  value={newSkillsInput}
-                  onChange={(e) => setNewSkillsInput(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all"
-                />
-              </div>
-
-              {/* Profile Image & Avatar Selection */}
-              <div className="pt-2 border-t border-surface-container-high space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold uppercase text-outline block">
-                    Profile Avatar / Photo
-                  </label>
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              {myAvailableSquads.length === 0 ? (
+                <div className="text-center py-6 space-y-3">
+                  <span className="material-symbols-outlined text-4xl text-outline">group_add</span>
+                  <h4 className="font-bold text-base text-on-surface">No Active Teams Found</h4>
+                  <p className="text-xs text-on-surface-variant max-w-sm mx-auto">
+                    You must first post a project or form a hackathon squad to invite teammates.
+                  </p>
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="text-xs font-bold text-secondary hover:underline cursor-pointer flex items-center gap-1"
+                    onClick={() => setSelectedBuilderForInvite(null)}
+                    className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-bold text-on-surface cursor-pointer mt-2"
                   >
-                    <span className="material-symbols-outlined text-sm">upload</span>
-                    <span>Upload photo from device</span>
+                    Close
                   </button>
                 </div>
-
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept="image/*"
-                  onChange={handleAvatarFileChange}
-                  className="hidden"
-                />
-
-                <div className="flex items-center gap-4 bg-surface-container-low p-3 rounded-2xl border border-surface-container-high">
-                  <img
-                    src={newAvatar || DEFAULT_AVATARS[0].url}
-                    alt="Selected Avatar"
-                    className="w-16 h-16 rounded-2xl object-cover border-2 border-secondary shadow-sm shrink-0"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-bold text-on-surface block">
-                      Selected Builder Photo
-                    </span>
-                    <p className="text-[11px] text-on-surface-variant mt-0.5">
-                      Uploaded photos or chosen default avatars will be displayed across student squad cards.
-                    </p>
+              ) : (
+                <form onSubmit={handleSendInviteSubmit} className="space-y-4 text-sm">
+                  <div>
+                    <label className="text-xs font-bold uppercase text-outline block mb-1">
+                      Choose Your Squad / Project *
+                    </label>
+                    <select
+                      required
+                      value={selectedSquadTarget}
+                      onChange={(e) => setSelectedSquadTarget(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all cursor-pointer font-medium"
+                    >
+                      {myAvailableSquads.map((sq) => (
+                        <option key={sq.id} value={sq.id}>
+                          {sq.title} ({sq.type === 'project' ? 'Project' : 'Hackathon Squad'} · {sq.filledCount}/{sq.totalCapacity} Members)
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                </div>
 
-                {/* Default Preset Avatars */}
-                <div>
-                  <span className="text-[11px] text-on-surface-variant font-medium block mb-2">
-                    Or select from curated default builder avatars:
-                  </span>
-                  <div className="grid grid-cols-6 gap-2">
-                    {DEFAULT_AVATARS.map((av) => (
-                      <button
-                        key={av.id}
-                        type="button"
-                        onClick={() => setNewAvatar(av.url)}
-                        title={av.label}
-                        className={`relative rounded-2xl overflow-hidden p-0.5 border-2 transition-all cursor-pointer ${
-                          newAvatar === av.url
-                            ? 'border-secondary ring-2 ring-secondary/30 scale-105'
-                            : 'border-transparent hover:border-outline opacity-80 hover:opacity-100'
-                        }`}
-                      >
-                        <img
-                          src={av.url}
-                          alt={av.label}
-                          className="w-full h-12 object-cover rounded-xl"
-                        />
-                      </button>
-                    ))}
+                  <div>
+                    <label className="text-xs font-bold uppercase text-outline block mb-1">
+                      Invited Role Title *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value)}
+                      placeholder="e.g. Frontend Engineer, ML Researcher, Teammate..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all"
+                    />
                   </div>
-                </div>
-              </div>
 
-              {/* Submit Buttons */}
-              <div className="pt-3 border-t border-surface-container-high flex items-center justify-end gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setIsAddModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-primary hover:bg-surface-tint text-on-primary text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5 active:scale-[0.98]"
-                >
-                  <span className="material-symbols-outlined text-sm">person_add</span>
-                  <span>Add Worker to Pool</span>
-                </button>
-              </div>
-            </form>
+                  <div>
+                    <label className="text-xs font-bold uppercase text-outline block mb-1">
+                      Personal Message
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={inviteMessage}
+                      onChange={(e) => setInviteMessage(e.target.value)}
+                      placeholder="Add a personalized note..."
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-on-surface text-sm transition-all resize-none"
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t border-surface-container-high flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBuilderForInvite(null)}
+                      className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSendingInvite}
+                      className="px-5 py-2 rounded-xl bg-primary hover:bg-surface-tint text-on-primary text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5 active:scale-[0.98] disabled:opacity-50"
+                    >
+                      <span className="material-symbols-outlined text-sm">send</span>
+                      <span>{isSendingInvite ? 'Dispatching...' : 'Send Real Invitation'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
           </div>
         </div>
       )}

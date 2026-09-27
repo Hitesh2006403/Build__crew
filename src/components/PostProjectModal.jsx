@@ -6,9 +6,9 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
   const [type, setType] = useState('hackathon');
   const [techStackInput, setTechStackInput] = useState('React 19, FastAPI, Tailwind');
   const [rolesInput, setRolesInput] = useState('frontend, ai');
-  const [campus, setCampus] = useState(currentUser?.campus || currentUser?.university || 'stanford');
+  const [campus, setCampus] = useState(currentUser?.college || currentUser?.university || currentUser?.campus || '');
   const [totalCapacity, setTotalCapacity] = useState(4);
-  const [categoryBadge, setCategoryBadge] = useState('HackNova 2026');
+  const [categoryBadge, setCategoryBadge] = useState('Collegiate Sprint');
 
   if (!isOpen) return null;
 
@@ -25,7 +25,7 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
       urgency: 'high',
       matchScore: 95,
       publishedTime: 'Just now',
-      image: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBjbkVkD8ugQCopgjlKUdX6h2t7iGR8U7cAotGEX4gkVp2iZGYgNXuhDd7uv8XKPdDKxRc5LVG5-2ku_w-inG49pGRXEBeatfaGIbtDqTB4GZbf-12sVHdMJBR4s9dSwOvIgdwjHPZxHAYY6iul7GnOXO1wqM8s9NQjaFCIpekgajipka8rL8aNXyl4sNuZ5jWKKChl91y1bgaayoCYgzuMAvhhpxODIRFzAx9FdSUbydfyLDzrLu9E',
+      image: '',
       imageTag: 'Collegiate Sprint',
       techStack: techStackInput.split(',').map(s => s.trim()).filter(Boolean),
       rolesNeeded: rolesInput.split(',').map(s => s.trim()).filter(Boolean),
@@ -37,7 +37,7 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
         university: currentUser?.university || currentUser?.college || 'Collegiate Campus',
         program: currentUser?.university || currentUser?.college || 'Undergraduate Member',
         roleTitle: currentUser?.roleTitle || 'Squad Creator',
-        avatar: currentUser?.avatar || currentUser?.profileImage || 'https://lh3.googleusercontent.com/aida-public/AB6AXuBirUkNQSo04g_tpOZ4BCEqxhIS1X_JeuPCz7HOuaAg-iBZjD079_5Kw5JH_beVshiDR-hGgf25xxHWHIOiujBaIs-w4YI0ynogQcCH-ChPBSE6SQTry_Dqz24c73Jk7DeMfwiJy0dTYKPf4u-A8WVNw1oUjo6ssG1p_WKvOPmg1OVEotk4p7HgClGq2FLb6UoHwks2MTWuddYD2hBI5uOVcjsqA5gleuV5YGmocfJVn1MpOeHrvsPd'
+        avatar: currentUser?.avatar || currentUser?.profileImage || ''
       },
       openVacancies: [
         {
@@ -188,17 +188,13 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
             <label className="block font-title-sm text-title-sm text-on-surface mb-1">
               Primary Campus Affiliation
             </label>
-            <select
+            <input
+              type="text"
               value={campus}
               onChange={(e) => setCampus(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all cursor-pointer"
-            >
-              <option value="stanford">Stanford University</option>
-              <option value="cmu">Carnegie Mellon (CMU)</option>
-              <option value="mit">MIT</option>
-              <option value="berkeley">UC Berkeley</option>
-              <option value="iit">IIT Delhi / Bombay</option>
-            </select>
+              placeholder="e.g. Your College / University"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
+            />
           </div>
 
           <div className="pt-3 flex items-center justify-end gap-2 border-t border-surface-container-high/60">

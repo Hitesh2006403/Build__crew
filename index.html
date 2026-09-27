@@ -2,14 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="https://lh3.googleusercontent.com/aida-public/AB6AXuDzNQdQlI_aqQ-zvBj2BqYI-DhIipISUabNH-uPjX4-v0V7jTZYdL6vBy9I-AvqFYORr2VZISaey_S8MTN96fca0RUMBx-jPpc6KmQgV0OorQBRhZsjUwbMMJ0JmPEVE0LHHvpPjGS1Xu5JsDsBjwPjOfuMOIe2uwyIvcxBtPwXx_TXtCKQigQ3ttQ478qdSFTFM0GWczWxAlfr3dsX4sO6-lpwk9Kg6CSinuhDw-OWDat-6-TvFkra" />
+    <link rel="icon" type="image/png" href="/buildcrew-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>BuildCrew — Campus Collab Engine</title>
     <!-- Google Fonts: Plus Jakarta Sans & Material Symbols -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <!-- Google Identity Services (GSI) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <!-- Tailwind CDN with exact Stitch configuration -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script id="tailwind-config">
@@ -121,7 +123,17 @@
     </script>
   </head>
   <body class="bg-background font-body-md text-on-surface antialiased selection:bg-secondary-fixed selection:text-on-secondary-fixed">
-    <div id="root"></div>
+    <div id="root">
+      <div id="initial-splash" style="position:fixed;inset:0;background-color:#ffffff;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.5rem;">
+          <img 
+            src="/buildcrew-splash-logo.png" 
+            alt="BuildCrew" 
+            style="width:288px;max-width:85vw;max-height:60vh;object-fit:contain;user-select:none;" 
+          />
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -100,7 +100,7 @@ export default function Profile({
   };
 
   const activeUser = user || currentUser || {};
-  const avatarUrl = activeUser.avatar || activeUser.profileImage || "https://lh3.googleusercontent.com/aida-public/AB6AXuBirUkNQSo04g_tpOZ4BCEqxhIS1X_JeuPCz7HOuaAg-iBZjD079_5Kw5JH_beVshiDR-hGgf25xxHWHIOiujBaIs-w4YI0ynogQcCH-ChPBSE6SQTry_Dqz24c73Jk7DeMfwiJy0dTYKPf4u-A8WVNw1oUjo6ssG1p_WKvOPmg1OVEotk4p7HgClGq2FLb6UoHwks2MTWuddYD2hBI5uOVcjsqA5gleuV5YGmocfJVn1MpOeHrvsPd";
+  const avatarUrl = activeUser.avatar || activeUser.profileImage || "";
 
   if (loadingProfile && !activeUser._id) {
     return (
@@ -144,11 +144,27 @@ export default function Profile({
         {/* User Card Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md pb-space-md border-b border-surface-container-low">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-space-md">
-            <img
-              src={avatarUrl}
-              alt={activeUser.name || 'Builder Profile'}
-              className="w-20 h-20 rounded-full object-cover shadow-md ring-4 ring-secondary-fixed shrink-0"
-            />
+            <div className="relative shrink-0">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt=""
+                  className="w-20 h-20 rounded-full object-cover shadow-md ring-4 ring-secondary-fixed shrink-0"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    if (e.currentTarget.nextElementSibling) {
+                      e.currentTarget.nextElementSibling.style.display = 'flex';
+                    }
+                  }}
+                />
+              ) : null}
+              <div 
+                style={{ display: avatarUrl ? 'none' : 'flex' }}
+                className="w-20 h-20 rounded-full bg-secondary text-on-secondary font-bold text-2xl items-center justify-center shadow-md ring-4 ring-secondary-fixed shrink-0"
+              >
+                {(activeUser.name || 'U').charAt(0).toUpperCase()}
+              </div>
+            </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <h2 className="font-headline-sm text-headline-sm font-bold text-on-surface">{activeUser.name || 'Student Builder'}</h2>
@@ -220,47 +236,36 @@ export default function Profile({
               </div>
             )}
 
-            {activeUser.lookingFor && (
-              <div className="p-4 rounded-xl bg-secondary-fixed/30 border border-secondary/20 space-y-1.5">
-                <span className="font-semibold text-on-surface block text-label-sm uppercase tracking-wider text-secondary">
-                  Target Objective &amp; Squad Role
+            {(Array.isArray(activeUser.skills) && activeUser.skills.length > 0) && (
+              <div>
+                <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider block mb-2">
+                  Technical Skills
                 </span>
-                <p className="font-body-md text-on-surface">{activeUser.lookingFor}</p>
-              </div>
-            )}
-
-            <div>
-              <span className="font-label-sm text-label-sm text-outline uppercase tracking-wider block mb-2">
-                Verified Technical Competencies
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {(Array.isArray(activeUser.skills) && activeUser.skills.length > 0) ? (
-                  activeUser.skills.map((skill, sidx) => (
+                <div className="flex flex-wrap gap-2">
+                  {activeUser.skills.map((skill, sidx) => (
                     <span
                       key={sidx}
                       className="px-3 py-1 rounded-lg bg-surface-container-high text-on-surface font-label-md text-label-md font-medium"
                     >
                       {skill}
                     </span>
-                  ))
-                ) : (
-                  <span className="text-xs text-on-surface-variant italic">No skills listed yet.</span>
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
               <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/50">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-outline block">Academic Year</span>
-                <span className="font-bold text-sm text-on-surface block mt-0.5">{activeUser.year || activeUser.graduationYear || 'Class of \'26'}</span>
+                <span className="font-bold text-sm text-on-surface block mt-0.5">{activeUser.year || activeUser.graduationYear || 'Not specified'}</span>
               </div>
               <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/50">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-outline block">Current Semester</span>
-                <span className="font-bold text-sm text-on-surface block mt-0.5">Semester {activeUser.semester || 6}</span>
+                <span className="font-bold text-sm text-on-surface block mt-0.5">{activeUser.semester ? `Semester ${activeUser.semester}` : 'Not specified'}</span>
               </div>
               <div className="p-3.5 rounded-xl bg-surface-container-low border border-surface-container-high/50">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-outline block">Collegiate Major</span>
-                <span className="font-bold text-sm text-on-surface block mt-0.5 truncate">{activeUser.branch || activeUser.major || 'Computer Science'}</span>
+                <span className="font-bold text-sm text-on-surface block mt-0.5 truncate">{activeUser.branch || activeUser.major || 'Not specified'}</span>
               </div>
             </div>
           </div>

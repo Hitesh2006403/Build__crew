@@ -10,6 +10,9 @@ const router = express.Router();
 // Students see only published events; Admins see all hackathons including drafts
 router.get("/", optionalAuth, async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.json([]);
+    }
     const isAdmin = req.user && req.user.role === "admin";
     const query = isAdmin ? {} : { isPublished: true };
 

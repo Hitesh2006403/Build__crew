@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import authApi from '../api/auth';
 
 export default function Auth({ onLoginSuccess }) {
@@ -24,10 +24,80 @@ export default function Auth({ onLoginSuccess }) {
   const [regAgreeTerms, setRegAgreeTerms] = useState(false);
   const [regSuccessMsg, setRegSuccessMsg] = useState('');
 
-  // Google Sign-In State & Modal
-  const [showGoogleModal, setShowGoogleModal] = useState(false);
-  const [googleEmail, setGoogleEmail] = useState('');
-  const [googleName, setGoogleName] = useState('');
+  // Google Client ID from environment (with configured default)
+  const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '411798632993-ro6hrv6j2pd8rn9jo3isuk2ee69d215o.apps.googleusercontent.com';
+
+  // Initialize Google Identity Services (One Tap & Credential)
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+
+    const initGsi = () => {
+      if (window.google?.accounts?.id) {
+        try {
+          window.google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            auto_select: false,
+            callback: async (response) => {
+              if (response.credential) {
+                try {
+                  setIsLoading(true);
+                  setErrorMessage('');
+                  const base64Url = response.credential.split('.')[1];
+                  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                  const jsonPayload = decodeURIComponent(
+                    atob(base64)
+                      .split('')
+                      .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                      .join('')
+                  );
+                  const payload = JSON.parse(jsonPayload);
+
+                  const data = await authApi.googleLogin({
+                    email: payload.email,
+                    name: payload.name,
+                    avatar: payload.picture,
+                  });
+                  setIsLoading(false);
+                  if (data.user) {
+                    onLoginSuccess(data.user);
+                  }
+                } catch (err) {
+                  setIsLoading(false);
+                  setErrorMessage(err.message || 'Google sign-in failed.');
+                }
+              }
+            },
+          });
+        } catch (err) {
+          console.warn('GSI initialize error:', err);
+        }
+      }
+    };
+
+    if (window.google?.accounts?.id) {
+      initGsi();
+    } else {
+      const timer = setInterval(() => {
+        if (window.google?.accounts?.id) {
+          clearInterval(timer);
+          initGsi();
+        }
+      }, 200);
+      return () => clearInterval(timer);
+    }
+  }, [GOOGLE_CLIENT_ID, onLoginSuccess]);
+
+  // Load remembered email on mount for email login only
+  useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem('buildcrew_remember_email');
+      if (savedEmail) {
+        setEmail(savedEmail);
+      }
+    } catch (err) {
+      // Ignore storage errors
+    }
+  }, []);
 
   // Forgot Password State
   const [forgotEmail, setForgotEmail] = useState('');
@@ -57,6 +127,17 @@ export default function Auth({ onLoginSuccess }) {
     try {
       const data = await authApi.login(email.trim(), password.trim());
       setIsLoading(false);
+
+      if (rememberMe) {
+        try {
+          localStorage.setItem('buildcrew_remember_email', email.trim());
+        } catch {}
+      } else {
+        try {
+          localStorage.removeItem('buildcrew_remember_email');
+        } catch {}
+      }
+
       if (data.user) {
         onLoginSuccess(data.user);
       }
@@ -66,48 +147,70 @@ export default function Auth({ onLoginSuccess }) {
     }
   };
 
+  // Real Google Sign-In Click Handler: opens official Google Account Chooser
   const handleGoogleSignInClick = () => {
-    const candidateEmail = email.trim() || regEmail.trim();
-    if (candidateEmail) {
-      setGoogleEmail(candidateEmail);
-    } else {
-      setGoogleEmail('');
-    }
-    const candidateName = regFullName.trim();
-    if (candidateName) {
-      setGoogleName(candidateName);
-    } else {
-      setGoogleName('');
-    }
     setErrorMessage('');
-    setShowGoogleModal(true);
-  };
 
-  const handleExecuteGoogleLogin = async (customEmail, customName) => {
-    const targetEmail = customEmail || googleEmail.trim();
-    const targetName = customName || googleName.trim();
-
-    if (!targetEmail) {
-      setErrorMessage('Please enter your Google account email.');
+    if (!GOOGLE_CLIENT_ID) {
+      setErrorMessage('Google Client ID not configured. Please add VITE_GOOGLE_CLIENT_ID in your .env file to enable official Google Sign-In.');
       return;
     }
 
-    setIsLoading(true);
-    setErrorMessage('');
+    if (window.google?.accounts?.oauth2) {
+      try {
+        setIsLoading(true);
+        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: GOOGLE_CLIENT_ID,
+          scope: 'email profile openid',
+          prompt: 'select_account',
+          callback: async (tokenResponse) => {
+            if (tokenResponse.error) {
+              setIsLoading(false);
+              if (tokenResponse.error !== 'access_denied') {
+                setErrorMessage(tokenResponse.error_description || 'Google sign-in was cancelled.');
+              }
+              return;
+            }
 
-    try {
-      const data = await authApi.googleLogin({
-        email: targetEmail,
-        name: targetName || targetEmail.split('@')[0],
-      });
-      setIsLoading(false);
-      setShowGoogleModal(false);
-      if (data.user) {
-        onLoginSuccess(data.user);
+            try {
+              // Fetch authenticated Google user info directly from Google API
+              const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+              });
+
+              if (!res.ok) {
+                throw new Error('Failed to retrieve user profile from Google.');
+              }
+
+              const profile = await res.json();
+
+              // Send authenticated Google user to BuildCrew backend
+              const data = await authApi.googleLogin({
+                email: profile.email,
+                name: profile.name,
+                avatar: profile.picture,
+              });
+
+              setIsLoading(false);
+              if (data.user) {
+                onLoginSuccess(data.user);
+              }
+            } catch (err) {
+              setIsLoading(false);
+              setErrorMessage(err.message || 'Google authentication failed.');
+            }
+          },
+        });
+
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+      } catch (err) {
+        setIsLoading(false);
+        setErrorMessage(err.message || 'Could not launch Google Sign-In.');
       }
-    } catch (err) {
-      setIsLoading(false);
-      setErrorMessage(err.message || 'Google sign-in failed. Please try again.');
+    } else if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt();
+    } else {
+      setErrorMessage('Google Sign-In service is loading. Please try again in a moment.');
     }
   };
 
@@ -220,8 +323,8 @@ export default function Auth({ onLoginSuccess }) {
         <div className="flex items-center gap-3">
           <img 
             alt="BuildCrew Logo" 
-            className="w-8 h-8 rounded-lg object-cover shadow-[0_1px_3px_rgba(15,23,42,0.08)] shrink-0" 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzNQdQlI_aqQ-zvBj2BqYI-DhIipISUabNH-uPjX4-v0V7jTZYdL6vBy9I-AvqFYORr2VZISaey_S8MTN96fca0RUMBx-jPpc6KmQgV0OorQBRhZsjUwbMMJ0JmPEVE0LHHvpPjGS1Xu5JsDsBjwPjOfuMOIe2uwyIvcxBtPwXx_TXtCKQigQ3ttQ478qdSFTFM0GWczWxAlfr3dsX4sO6-lpwk9Kg6CSinuhDw-OWDat-6-TvFkra"
+            className="w-8 h-8 rounded-lg object-contain shadow-[0_1px_3px_rgba(15,23,42,0.08)] shrink-0" 
+            src="/buildcrew-logo.png"
           />
           <div className="flex flex-col">
             <span className="font-headline-sm text-lg font-bold text-on-surface tracking-tight leading-none">
@@ -294,7 +397,7 @@ export default function Auth({ onLoginSuccess }) {
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
-                <span>Sign in with Google</span>
+                <span>Continue with Google</span>
               </button>
 
               <div className="relative my-4 flex items-center justify-center">
@@ -455,7 +558,7 @@ export default function Auth({ onLoginSuccess }) {
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
-                <span>Sign up with Google</span>
+                <span>Continue with Google</span>
               </button>
 
               <div className="relative my-3 flex items-center justify-center">
@@ -824,108 +927,6 @@ export default function Auth({ onLoginSuccess }) {
 
         </div>
 
-        {/* Google Sign In Modal */}
-        {showGoogleModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-            <div className="w-full max-w-sm bg-surface-container-lowest rounded-3xl p-6 shadow-2xl border border-surface-container-high animate-modal relative">
-              <button
-                type="button"
-                onClick={() => setShowGoogleModal(false)}
-                className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface cursor-pointer p-1 rounded-full hover:bg-surface-container transition-colors"
-                title="Close"
-              >
-                <span className="material-symbols-outlined text-lg">close</span>
-              </button>
-
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-2xl bg-surface-container-low border border-surface-container flex items-center justify-center shrink-0 shadow-sm">
-                  <svg className="w-5 h-5" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-on-surface">Sign in with Google</h2>
-                  <p className="text-xs text-on-surface-variant">Choose your Google account</p>
-                </div>
-              </div>
-
-              {/* Quick 1-click option */}
-              <div className="space-y-2 mb-4">
-                <button
-                  type="button"
-                  onClick={() => handleExecuteGoogleLogin("student.builder@gmail.com", "Student Innovator")}
-                  className="w-full p-2.5 rounded-xl border border-surface-container-high hover:border-secondary hover:bg-surface-container-low transition-all text-left flex items-center gap-3 cursor-pointer group"
-                >
-                  <div className="w-8 h-8 rounded-full bg-secondary/15 text-secondary flex items-center justify-center font-bold text-sm">
-                    S
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-bold text-on-surface truncate">Student Innovator</div>
-                    <div className="text-[11px] text-on-surface-variant truncate">student.builder@gmail.com</div>
-                  </div>
-                  <span className="material-symbols-outlined text-secondary opacity-0 group-hover:opacity-100 text-sm transition-opacity">arrow_forward</span>
-                </button>
-              </div>
-
-              {/* Or enter custom Google account */}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleExecuteGoogleLogin();
-                }}
-                className="pt-3 border-t border-surface-container-high/60 space-y-3"
-              >
-                <div>
-                  <label className="block text-[11px] font-bold text-on-surface mb-1">
-                    Or Enter Google Email:
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={googleEmail}
-                    onChange={(e) => setGoogleEmail(e.target.value)}
-                    placeholder="e.g. you@gmail.com or student@college.edu"
-                    className="w-full px-3 py-2 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-xs text-on-surface font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-on-surface mb-1">
-                    Your Name (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={googleName}
-                    onChange={(e) => setGoogleName(e.target.value)}
-                    placeholder="e.g. Alex Rivera"
-                    className="w-full px-3 py-2 rounded-xl bg-surface-container-low border border-surface-container-high focus:border-secondary outline-none text-xs text-on-surface font-medium"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full py-2.5 rounded-xl bg-primary hover:bg-surface-tint active:scale-[0.98] text-on-primary font-bold text-xs shadow-md transition-all cursor-pointer flex items-center justify-center gap-2 mt-2"
-                >
-                  {isLoading ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                      <span>Signing in...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>Continue with this Account</span>
-                      <span className="material-symbols-outlined text-sm">arrow_forward</span>
-                    </>
-                  )}
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
       </main>
 
       {/* Footer Branding */}

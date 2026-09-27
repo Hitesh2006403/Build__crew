@@ -8,6 +8,9 @@ const router = express.Router();
 // GET /api/users - Browse & discover students / builders
 router.get("/", async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.json([]);
+    }
     const { search, skill, role } = req.query;
     const query = {};
 

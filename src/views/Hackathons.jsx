@@ -178,7 +178,7 @@ export default function Hackathons({
           <button
             type="button"
             onClick={() => {
-              if (showToast) showToast('Circuit Schedule synced with your Stanford Google Calendar!');
+              if (showToast) showToast('Circuit Schedule synced with your Google Calendar!');
             }}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-xs font-bold shadow-sm transition-all cursor-pointer"
           >
@@ -464,18 +464,26 @@ export default function Hackathons({
 
         {activeCircuitHackathons.length === 0 && concludedHackathons.length === 0 && (
           <div className="bg-surface-container-lowest rounded-3xl p-12 text-center border border-surface-container-high space-y-3">
-            <span className="material-symbols-outlined text-4xl text-outline">search_off</span>
-            <h4 className="font-title-lg font-bold text-on-surface">No hackathons match your filters</h4>
+            <span className="material-symbols-outlined text-4xl text-outline">
+              {hackathons.length === 0 ? 'emoji_events' : 'search_off'}
+            </span>
+            <h4 className="font-title-lg font-bold text-on-surface">
+              {hackathons.length === 0 ? 'No active hackathons on circuit yet' : 'No hackathons match your filters'}
+            </h4>
             <p className="text-xs text-on-surface-variant max-w-sm mx-auto">
-              Try clearing your search query or reset the track filters.
+              {hackathons.length === 0
+                ? 'Campus hackathons and collegiate sprints will appear here once published by organizers or administrators.'
+                : 'Try clearing your search query or reset the track filters.'}
             </p>
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-bold text-on-surface transition-all cursor-pointer inline-block mt-1"
-            >
-              Reset Filters
-            </button>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-bold text-on-surface transition-all cursor-pointer inline-block mt-1"
+              >
+                Reset Filters
+              </button>
+            )}
           </div>
         )}
       </div>

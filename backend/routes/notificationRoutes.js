@@ -9,8 +9,7 @@ const router = express.Router();
 router.get("/", authenticateUser, async (req, res) => {
   try {
     const notifications = await Notification.find({ recipient: req.user._id }).sort({ createdAt: -1 });
-    const unreadCount = await Notification.countDocuments({ recipient: req.user._id, read: false });
-    return res.json({ notifications, unreadCount });
+    return res.json(notifications);
   } catch (err) {
     console.error("Fetch notifications error:", err);
     return res.status(500).json({ error: "Could not retrieve notifications.", details: err.message });

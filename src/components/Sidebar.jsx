@@ -39,8 +39,8 @@ export default function Sidebar({
         >
           <img 
             alt="BuildCrew Logo" 
-            className="w-8 h-8 rounded-lg object-cover shadow-[0_1px_3px_rgba(15,23,42,0.08)] shrink-0" 
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzNQdQlI_aqQ-zvBj2BqYI-DhIipISUabNH-uPjX4-v0V7jTZYdL6vBy9I-AvqFYORr2VZISaey_S8MTN96fca0RUMBx-jPpc6KmQgV0OorQBRhZsjUwbMMJ0JmPEVE0LHHvpPjGS1Xu5JsDsBjwPjOfuMOIe2uwyIvcxBtPwXx_TXtCKQigQ3ttQ478qdSFTFM0GWczWxAlfr3dsX4sO6-lpwk9Kg6CSinuhDw-OWDat-6-TvFkra"
+            className="w-8 h-8 rounded-lg object-contain shrink-0" 
+            src="/buildcrew-logo.png"
           />
           <div className="flex flex-col">
             <span className="font-headline-sm text-headline-sm font-bold text-on-surface tracking-tight leading-none">
@@ -170,20 +170,36 @@ export default function Sidebar({
             onClick={() => handleNavClick('profile')}
             className="flex items-center gap-space-sm px-space-md py-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container transition-all cursor-pointer group"
           >
-            <img 
-              alt="Profile" 
-              className="w-9 h-9 rounded-full object-cover shadow-[0_1px_3px_rgba(15,23,42,0.08)] shrink-0" 
-              src={currentUser?.avatar || "https://lh3.googleusercontent.com/aida/AEtjO1U9z5PpV3Oif5HhhByVbwFRYk7HWVBiaoD0VNB5HJ0qL8NTgyV9zdv3Z0kb1LWlSYbxqz2J0ARPqkm6aWj8V5UZtnnkauBTB6e-Pvqfvt90EnUwriRM5A97Q9V9iZdlRCjtwercmGE3G05yZRlXzzCm7g9O5kGcUVghkc3NcvdMvplHHEzkzeKbC2NS5k3KzdHOvmlEJGz_SqF5Q0Kz5kl0mRpG_0NW8L5Hs51VIWTludWsf0Raog0dXhpSS-eK4_xEupfb60OG"}
-            />
+            <div className="relative shrink-0">
+              {currentUser?.avatar ? (
+                <img 
+                  alt="" 
+                  className="w-9 h-9 rounded-full object-cover shadow-xs shrink-0" 
+                  src={currentUser.avatar}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    if (e.currentTarget.nextElementSibling) {
+                      e.currentTarget.nextElementSibling.style.display = 'flex';
+                    }
+                  }}
+                />
+              ) : null}
+              <div 
+                style={{ display: currentUser?.avatar ? 'none' : 'flex' }}
+                className="w-9 h-9 rounded-full bg-secondary/15 text-secondary font-bold text-sm items-center justify-center shrink-0"
+              >
+                {(currentUser?.name || 'U').charAt(0).toUpperCase()}
+              </div>
+            </div>
             <div className="flex flex-col min-w-0 flex-1">
               <span className="font-title-sm text-title-sm font-semibold text-on-surface truncate leading-tight">
-                {currentUser?.name || 'Jayanth V.'}
+                {currentUser?.name || 'Student Member'}
               </span>
               <span className="font-body-sm text-body-sm text-on-surface-variant truncate leading-tight">
                 {isAdmin ? (
-                  <span className="text-secondary font-bold text-[11px]">Founder &amp; Admin</span>
+                  <span className="text-secondary font-bold text-[11px]">Administrator</span>
                 ) : (
-                  currentUser?.university || "Stanford CS '26"
+                  currentUser?.university || currentUser?.college || 'Campus Member'
                 )}
               </span>
             </div>

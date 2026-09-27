@@ -10,6 +10,9 @@ const router = express.Router();
 // GET /api/applications - Get all relevant applications for authenticated user
 router.get("/", authenticateUser, async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.json([]);
+    }
     // Find projects owned by user
     const ownedProjects = await Project.find({ createdBy: req.user._id }).select("_id");
     const ownedProjectIds = ownedProjects.map((p) => p._id);

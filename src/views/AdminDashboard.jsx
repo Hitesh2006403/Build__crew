@@ -567,7 +567,7 @@ export default function AdminDashboard({
       total,
       published,
       drafts,
-      prizeSum: totalPrizesNumeric > 0 ? `₹${totalPrizesNumeric.toLocaleString('en-IN')}+` : '₹15,00,000+'
+      prizeSum: totalPrizesNumeric > 0 ? `₹${totalPrizesNumeric.toLocaleString('en-IN')}+` : '₹0'
     };
   }, [hackathons]);
 

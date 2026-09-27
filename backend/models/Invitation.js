@@ -24,6 +24,15 @@ const invitationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "HackathonTeam",
     },
+    type: {
+      type: String,
+      enum: ["project", "hackathon"],
+      default: "project",
+    },
+    teamName: {
+      type: String,
+      default: "",
+    },
     role: {
       type: String,
       default: "Teammate",

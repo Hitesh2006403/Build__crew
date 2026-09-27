@@ -38,6 +38,7 @@ export default function App() {
   const [builders, setBuilders] = useState([]);
   const [applications, setApplications] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [pendingInvitations, setPendingInvitations] = useState([]);
   const [hackathonSquads, setHackathonSquads] = useState([]);
   const [isBackendLoading, setIsBackendLoading] = useState(true);
   const [backendError, setBackendError] = useState(null);
@@ -47,6 +48,26 @@ export default function App() {
   const [isPostProjectOpen, setIsPostProjectOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Opening Splash Screen State
+  const [showSplash, setShowSplash] = useState(true);
+  const [isSplashFading, setIsSplashFading] = useState(false);
+
+  // Splash Screen Lifecycle: Show for 1.8s then smoothly fade out over 700ms
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => {
+      setIsSplashFading(true);
+    }, 1800);
+
+    const removeTimer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2500);
+
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
+  }, []);
 
   // Toast notification
   const [toastMessage, setToastMessage] = useState(null);
@@ -92,9 +113,10 @@ export default function App() {
 
   const fetchUserData = useCallback(async () => {
     try {
-      const [appsRes, notifsRes] = await Promise.allSettled([
+      const [appsRes, notifsRes, invsRes] = await Promise.allSettled([
         applicationsApi.getApplications(),
-        notificationsApi.getNotifications()
+        notificationsApi.getNotifications(),
+        invitationsApi.getMyInvitations()
       ]);
 
       if (appsRes.status === 'fulfilled' && Array.isArray(appsRes.value)) {
@@ -102,6 +124,10 @@ export default function App() {
       }
       if (notifsRes.status === 'fulfilled' && Array.isArray(notifsRes.value)) {
         setNotifications(notifsRes.value);
+      }
+      if (invsRes.status === 'fulfilled' && invsRes.value) {
+        const received = Array.isArray(invsRes.value.received) ? invsRes.value.received : [];
+        setPendingInvitations(received.filter(inv => inv.status === 'pending'));
       }
     } catch (err) {
       console.warn('Could not load user data from backend:', err);
@@ -177,17 +203,10 @@ export default function App() {
           ]);
         }
 
-        // 3. If authenticated, fetch user applications and notifications
+        // 3. If authenticated, fetch user applications, notifications, and invitations
         if (authenticatedUser && isMounted) {
           try {
-            const [apps, notifs] = await Promise.all([
-              applicationsApi.getApplications().catch(() => []),
-              notificationsApi.getNotifications().catch(() => [])
-            ]);
-            if (isMounted) {
-              setApplications(Array.isArray(apps) ? apps : []);
-              setNotifications(Array.isArray(notifs) ? notifs : []);
-            }
+            await fetchUserData();
           } catch {
             // Silently continue
           }
@@ -332,26 +351,58 @@ export default function App() {
     }
   };
 
-  const handleInviteBuilder = async (builder) => {
+  const handleInviteBuilder = async (inviteData) => {
     try {
-      const receiverId = typeof builder === 'object' ? (builder._id || builder.id) : builder;
-      const builderName = typeof builder === 'object' ? builder.name : 'Teammate';
+      let payload;
+      if (typeof inviteData === 'object' && inviteData.receiverId) {
+        payload = inviteData;
+      } else {
+        const receiverId = typeof inviteData === 'object' ? (inviteData._id || inviteData.id) : inviteData;
+        const role = (typeof inviteData === 'object' ? (inviteData.roleTitle || inviteData.role) : '') || 'Core Contributor';
+        payload = {
+          receiverId,
+          role,
+          message: 'Join our squad on BuildCrew!'
+        };
+      }
 
-      if (!receiverId) {
+      if (!payload.receiverId) {
         showToast('Invalid builder ID for invitation');
         return;
       }
 
-      await invitationsApi.sendInvitation({
-        receiverId,
-        role: (typeof builder === 'object' ? builder.roleTitle || builder.role : '') || 'Teammate / Contributor',
-        message: `Join our squad on BuildCrew!`
-      });
-      showToast(`Invitation dispatched to ${builderName}!`);
-      fetchUserData();
+      const res = await invitationsApi.sendInvitation(payload);
+      showToast(res.message || 'Invitation sent successfully in MongoDB!');
+      await fetchUserData();
     } catch (err) {
       console.error('Invitation error:', err);
-      showToast(`Invitation error: ${err.message}`);
+      showToast(err.message || 'Invitation error');
+    }
+  };
+
+  const handleAcceptInvitation = async (invitationId) => {
+    try {
+      const res = await invitationsApi.respondInvitation(invitationId, 'accepted');
+      showToast('Invitation accepted! You have joined the squad.');
+      await Promise.allSettled([
+        fetchUserData(),
+        fetchProjects(),
+        fetchHackathons()
+      ]);
+    } catch (err) {
+      console.error('Accept invitation error:', err);
+      showToast(err.message || 'Failed to accept invitation');
+    }
+  };
+
+  const handleRejectInvitation = async (invitationId) => {
+    try {
+      await invitationsApi.respondInvitation(invitationId, 'rejected');
+      showToast('Invitation declined.');
+      await fetchUserData();
+    } catch (err) {
+      console.error('Reject invitation error:', err);
+      showToast(err.message || 'Failed to decline invitation');
     }
   };
 
@@ -393,7 +444,24 @@ export default function App() {
   if (!currentUser) {
     const hasToken = !!authApi.getToken();
     return (
-      <div className="min-h-screen bg-background font-body-md text-on-surface antialiased">
+      <div className="min-h-screen bg-background font-body-md text-on-surface antialiased relative">
+        {/* Opening Splash Screen centered on clean white background */}
+        {showSplash && (
+          <div 
+            className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-700 ease-in-out ${
+              isSplashFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            }`}
+          >
+            <div className="flex flex-col items-center justify-center p-6 animate-splash">
+              <img 
+                src="/buildcrew-splash-logo.png" 
+                alt="BuildCrew" 
+                className="w-72 sm:w-96 max-w-[85vw] max-h-[60vh] object-contain select-none" 
+              />
+            </div>
+          </div>
+        )}
+
         {isBackendLoading && hasToken ? (
           <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
             <div className="w-12 h-12 rounded-2xl bg-secondary/20 flex items-center justify-center mb-4">
@@ -435,7 +503,24 @@ export default function App() {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <div className="min-h-screen bg-background text-on-surface flex flex-col font-body-md antialiased">
+    <div className="min-h-screen bg-background text-on-surface flex flex-col font-body-md antialiased relative">
+      {/* Opening Splash Screen centered on clean white background */}
+      {showSplash && (
+        <div 
+          className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-700 ease-in-out ${
+            isSplashFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
+        >
+          <div className="flex flex-col items-center justify-center p-6 animate-splash">
+            <img 
+              src="/buildcrew-splash-logo.png" 
+              alt="BuildCrew" 
+              className="w-72 sm:w-96 max-w-[85vw] max-h-[60vh] object-contain select-none" 
+            />
+          </div>
+        </div>
+      )}
+
       {/* Fixed Navigation Sidebar */}
       <Sidebar
         activeView={activeView}
@@ -460,6 +545,9 @@ export default function App() {
           }}
           notificationCount={unreadCount}
           notifications={notifications}
+          pendingInvitations={pendingInvitations}
+          onAcceptInvitation={handleAcceptInvitation}
+          onRejectInvitation={handleRejectInvitation}
           onMarkRead={handleMarkNotificationRead}
           onMarkAllRead={handleMarkAllNotificationsRead}
           onNavigateProfile={() => handleNavigateView('profile')}
@@ -525,8 +613,10 @@ export default function App() {
           {activeView === 'find-builders' && (
             <FindBuilders
               builders={builders}
+              projects={projects}
+              hackathonSquads={hackathonSquads}
+              pendingInvitations={pendingInvitations}
               onInvite={handleInviteBuilder}
-              onAddBuilder={handleAddBuilder}
               onViewProfile={handleViewProfile}
               showToast={showToast}
               currentUser={currentUser}
@@ -549,64 +639,180 @@ export default function App() {
             />
           )}
 
-          {activeView === 'my-teams' && (
-            <div className="flex flex-col w-full pb-space-xl space-y-space-lg">
-              <div className="flex flex-col max-w-3xl">
-                <div className="flex items-center gap-space-xs text-secondary font-label-md text-label-md uppercase tracking-wider mb-1">
-                  <span className="material-symbols-outlined text-base">diversity_3</span>
-                  <span>Active Squad Pods</span>
-                </div>
-                <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
-                  My Teams &amp; Squads
-                </h1>
-                <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-                  Collaborate in real-time with verified squad members preparing for upcoming hackathon milestones.
-                </p>
-              </div>
+          {activeView === 'my-teams' && (() => {
+            const myProjectTeams = projects.filter(p => {
+              if (!currentUser) return false;
+              const isOwner = (p.createdBy?._id || p.createdBy) === currentUser._id;
+              const isMember = Array.isArray(p.members) && p.members.some(m => (m._id || m) === currentUser._id);
+              return isOwner || isMember;
+            });
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
-                {projects.filter(p => p.members?.some(m => (m._id === currentUser._id || m === currentUser._id)) || p.createdBy === currentUser._id).length === 0 ? (
-                  <div className="col-span-2 bg-surface-container-lowest rounded-2xl p-space-xl text-center text-on-surface-variant">
+            const myHackTeams = hackathonSquads.filter(h => {
+              if (!currentUser) return false;
+              const isOwner = (h.createdBy?._id || h.createdBy) === currentUser._id;
+              const isMember = Array.isArray(h.members) && h.members.some(m => (m._id || m) === currentUser._id);
+              return isOwner || isMember;
+            });
+
+            const hasAnyTeams = myProjectTeams.length > 0 || myHackTeams.length > 0;
+
+            return (
+              <div className="flex flex-col w-full pb-space-xl space-y-space-lg">
+                <div className="flex flex-col max-w-3xl">
+                  <div className="flex items-center gap-space-xs text-secondary font-label-md text-label-md uppercase tracking-wider mb-1">
+                    <span className="material-symbols-outlined text-base">diversity_3</span>
+                    <span>Active Squad Pods</span>
+                  </div>
+                  <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
+                    My Teams &amp; Squads
+                  </h1>
+                  <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
+                    Collaborate in real-time with verified squad members preparing for upcoming hackathon milestones.
+                  </p>
+                </div>
+
+                {/* Pending Squad Invitations (Requirement 4 & 5) */}
+                {pendingInvitations && pendingInvitations.length > 0 && (
+                  <div className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm border border-secondary/25 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-secondary text-xl">mail</span>
+                        <h2 className="font-headline-sm text-lg font-bold text-on-surface">
+                          Pending Squad Invitations ({pendingInvitations.length})
+                        </h2>
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-xs font-bold">
+                        Action Required
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {pendingInvitations.map((inv) => {
+                        const senderName = inv.sender?.name || 'A teammate';
+                        const teamTitle = inv.teamName || inv.project?.title || inv.hackathonTeam?.teamName || 'the squad';
+                        return (
+                          <div key={inv._id} className="p-4 rounded-xl bg-surface-container-low border border-surface-container-high/60 flex flex-col justify-between space-y-3">
+                            <div>
+                              <div className="flex items-center justify-between text-xs text-secondary font-bold uppercase tracking-wider mb-1">
+                                <span>Invitation</span>
+                                <span className="text-outline font-normal">
+                                  {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : 'Recent'}
+                                </span>
+                              </div>
+                              <h3 className="font-title-md text-base font-bold text-on-surface">
+                                {senderName} invited you to join <span className="text-secondary">[{teamTitle}]</span>
+                              </h3>
+                              {inv.role && (
+                                <p className="text-xs text-on-surface-variant mt-1">
+                                  Invited Position: <strong className="text-on-surface">{inv.role}</strong>
+                                </p>
+                              )}
+                              {inv.message && (
+                                <p className="text-xs text-on-surface-variant italic mt-1 bg-surface-container-lowest/60 p-2 rounded-lg">
+                                  "{inv.message}"
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2 pt-2 border-t border-surface-container-high/60">
+                              <button
+                                type="button"
+                                onClick={() => handleAcceptInvitation(inv._id)}
+                                className="flex-1 py-2 px-3 rounded-xl bg-primary hover:bg-surface-tint text-on-primary font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1 active:scale-[0.98]"
+                              >
+                                <span className="material-symbols-outlined text-base">check</span>
+                                <span>Accept Invitation</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRejectInvitation(inv._id)}
+                                className="flex-1 py-2 px-3 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-xs transition-all cursor-pointer flex items-center justify-center gap-1"
+                              >
+                                <span className="material-symbols-outlined text-base">close</span>
+                                <span>Reject</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Squad Rosters: Projects & Hackathons */}
+                {!hasAnyTeams && (!pendingInvitations || pendingInvitations.length === 0) ? (
+                  <div className="bg-surface-container-lowest rounded-2xl p-space-xl text-center text-on-surface-variant border border-surface-container-high/40">
                     <span className="material-symbols-outlined text-4xl text-outline mb-2">diversity_3</span>
                     <p className="font-body-lg text-body-lg text-on-surface font-semibold">No active squads joined yet</p>
                     <p className="font-body-sm text-body-sm mt-1">Explore Discover Projects or Squad Up in Hackathons to join a team.</p>
                   </div>
                 ) : (
-                  projects.filter(p => p.members?.some(m => (m._id === currentUser._id || m === currentUser._id)) || p.createdBy === currentUser._id).map((p, idx) => (
-                    <div key={p._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
-                          {p.categoryBadge || 'Squad Pod'}
-                        </span>
-                        <span className="font-label-sm text-label-sm text-secondary font-semibold">Active Sprint</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+                    {/* Project Teams */}
+                    {myProjectTeams.map((p, idx) => (
+                      <div key={p._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
+                            {p.categoryBadge || 'Project Squad'}
+                          </span>
+                          <span className="font-label-sm text-label-sm text-secondary font-semibold">
+                            {p.filledCount || (p.members?.length || 1)}/{p.totalCapacity || 4} Members
+                          </span>
+                        </div>
+                        <div>
+                          <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
+                            {p.title}
+                          </h3>
+                          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
+                            {p.tagline || p.fullDescription}
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
+                          <span className="text-on-surface font-medium">Squad Lead</span>
+                          <span className="text-secondary font-semibold">{p.lead?.name || 'Lead Architect'}</span>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-high/60">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectProject(p)}
+                            className="py-2 px-4 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm hover:bg-surface-tint transition-all cursor-pointer shadow-xs"
+                          >
+                            Open Squad Workspace
+                          </button>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-                          {p.title}
-                        </h3>
-                        <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                          {p.tagline || p.fullDescription}
-                        </p>
+                    ))}
+
+                    {/* Hackathon Teams */}
+                    {myHackTeams.map((h, idx) => (
+                      <div key={h._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 font-label-sm text-label-sm font-semibold">
+                            {h.hackathonTitle || 'Hackathon Squad'}
+                          </span>
+                          <span className="font-label-sm text-label-sm text-secondary font-semibold">
+                            {h.filledCount || (h.members?.length || 1)}/{h.totalCapacity || 4} Members
+                          </span>
+                        </div>
+                        <div>
+                          <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
+                            {h.teamName || h.title}
+                          </h3>
+                          <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
+                            {h.tagline || h.description || `Competing in ${h.hackathonTitle || 'Hackathon'}`}
+                          </p>
+                        </div>
+                        <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
+                          <span className="text-on-surface font-medium">Squad Lead</span>
+                          <span className="text-secondary font-semibold">{h.lead?.name || 'Team Lead'}</span>
+                        </div>
                       </div>
-                      <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
-                        <span className="text-on-surface font-medium">Squad Lead</span>
-                        <span className="text-secondary font-semibold">{p.lead?.name || 'Lead Architect'}</span>
-                      </div>
-                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-high/60">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectProject(p)}
-                          className="py-2 px-4 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm hover:bg-surface-tint transition-all cursor-pointer"
-                        >
-                          Open Squad Workspace
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 )}
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {(activeView === 'profile' || activeView === 'settings') && (
             <Profile
