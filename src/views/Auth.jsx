@@ -1,9 +1,24 @@
 import { useState, useEffect } from 'react';
 import authApi from '../api/auth';
 
-export default function Auth({ onLoginSuccess }) {
+export default function Auth({ onLoginSuccess, initialMode = 'login', onModeChange }) {
   // Modes: 'login' | 'register' | 'forgot' | 'reset'
-  const [authMode, setAuthMode] = useState('login');
+  const [authMode, setAuthMode] = useState(initialMode || 'login');
+
+  useEffect(() => {
+    if (initialMode && ['login', 'register', 'forgot', 'reset'].includes(initialMode)) {
+      handleSetAuthMode(initialMode);
+      setErrorMessage('');
+    }
+  }, [initialMode]);
+
+  const handleSetAuthMode = (mode) => {
+    setAuthMode(mode);
+    setErrorMessage('');
+    if (onModeChange) {
+      onModeChange(mode);
+    }
+  };
   
   // Login State
   const [email, setEmail] = useState('');
@@ -345,7 +360,7 @@ export default function Auth({ onLoginSuccess }) {
             <button
               type="button"
               onClick={() => {
-                setAuthMode('login');
+                handleSetAuthMode('login');
                 setErrorMessage('');
               }}
               className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-secondary hover:bg-surface-container transition-all cursor-pointer"
@@ -476,7 +491,7 @@ export default function Auth({ onLoginSuccess }) {
                     type="button"
                     onClick={() => {
                       setForgotEmail(email);
-                      setAuthMode('forgot');
+                      handleSetAuthMode('forgot');
                       setErrorMessage('');
                     }}
                     className="text-xs font-semibold text-secondary hover:underline cursor-pointer"
@@ -512,7 +527,7 @@ export default function Auth({ onLoginSuccess }) {
                   <button
                     type="button"
                     onClick={() => {
-                      setAuthMode('register');
+                      handleSetAuthMode('register');
                       setErrorMessage('');
                     }}
                     className="font-bold text-secondary hover:underline cursor-pointer"
@@ -532,7 +547,7 @@ export default function Auth({ onLoginSuccess }) {
               <div className="mb-4">
                 <button
                   type="button"
-                  onClick={() => setAuthMode('login')}
+                  onClick={() => handleSetAuthMode('login')}
                   className="inline-flex items-center gap-1 text-xs font-bold text-on-surface-variant hover:text-on-surface mb-2 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-base">arrow_back</span>
@@ -702,7 +717,7 @@ export default function Auth({ onLoginSuccess }) {
                   <button
                     type="button"
                     onClick={() => {
-                      setAuthMode('login');
+                      handleSetAuthMode('login');
                       setErrorMessage('');
                     }}
                     className="font-bold text-secondary hover:underline cursor-pointer"
@@ -714,7 +729,7 @@ export default function Auth({ onLoginSuccess }) {
                   type="button"
                   onClick={() => {
                     setForgotEmail(regEmail);
-                    setAuthMode('forgot');
+                    handleSetAuthMode('forgot');
                     setErrorMessage('');
                   }}
                   className="font-bold text-secondary hover:underline cursor-pointer"
@@ -733,7 +748,7 @@ export default function Auth({ onLoginSuccess }) {
               <div className="mb-6">
                 <button
                   type="button"
-                  onClick={() => setAuthMode('login')}
+                  onClick={() => handleSetAuthMode('login')}
                   className="inline-flex items-center gap-1 text-xs font-bold text-on-surface-variant hover:text-on-surface mb-3 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-base">arrow_back</span>
@@ -801,7 +816,7 @@ export default function Auth({ onLoginSuccess }) {
                     </p>
                     <button
                       type="button"
-                      onClick={() => setAuthMode('reset')}
+                      onClick={() => handleSetAuthMode('reset')}
                       className="w-full py-2 rounded-xl bg-secondary text-on-secondary font-bold text-xs hover:bg-secondary/90 transition-all cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <span className="material-symbols-outlined text-sm">key</span>
@@ -831,7 +846,7 @@ export default function Auth({ onLoginSuccess }) {
               <div className="mb-6">
                 <button
                   type="button"
-                  onClick={() => setAuthMode('login')}
+                  onClick={() => handleSetAuthMode('login')}
                   className="inline-flex items-center gap-1 text-xs font-bold text-on-surface-variant hover:text-on-surface mb-3 cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-base">arrow_back</span>
@@ -912,7 +927,7 @@ export default function Auth({ onLoginSuccess }) {
                   <button
                     type="button"
                     onClick={() => {
-                      setAuthMode('login');
+                      handleSetAuthMode('login');
                       setResetSuccess(false);
                       setPassword(newPassword);
                     }}

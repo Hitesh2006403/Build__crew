@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 
 export default function Header({ 
+  onOpenMobileNav,
   activeView,
   searchQuery, 
-  setSearchQuery,
+  setSearchQuery, 
   onSearchFocus,
   notificationCount = 0,
   notifications = [],
@@ -14,7 +15,8 @@ export default function Header({
   onNavigateApplications,
   currentUser,
   onLogout,
-  onOpenAdminDashboard
+  onOpenAdminDashboard,
+  onNavigateHome
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -58,36 +60,59 @@ export default function Header({
   };
 
   return (
-    <header className="fixed top-0 left-72 right-0 h-16 bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-space-lg">
-      {/* Left: Active Search Bar & Campus Tag */}
-      <div className="flex items-center gap-space-md">
-        <div className="relative flex items-center w-84 group">
-          <span className="material-symbols-outlined absolute left-3 text-on-surface-variant text-lg pointer-events-none group-focus-within:text-secondary transition-colors">
+    <header className="fixed top-0 left-0 lg:left-72 right-0 h-16 bg-surface/90 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-40 flex items-center justify-between px-3 sm:px-4 lg:px-space-lg">
+      {/* Left: Mobile Menu, Logo & Search */}
+      <div className="flex items-center gap-2 sm:gap-space-md min-w-0 flex-1 sm:flex-initial">
+        {/* Mobile Hamburger Button */}
+        <button
+          type="button"
+          onClick={onOpenMobileNav}
+          className="lg:hidden p-2 -ml-1 rounded-xl text-on-surface hover:bg-surface-container flex items-center justify-center shrink-0 cursor-pointer"
+          aria-label="Open Navigation Menu"
+        >
+          <span className="material-symbols-outlined text-2xl">menu</span>
+        </button>
+
+        {/* Mobile Brand Icon */}
+        <div 
+          onClick={onNavigateHome || onNavigateProfile}
+          className="flex lg:hidden items-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <img 
+            alt="BuildCrew" 
+            className="w-7 h-7 rounded-lg object-contain shrink-0" 
+            src="/buildcrew-logo.png"
+          />
+        </div>
+
+        {/* Responsive Search Input */}
+        <div className="relative flex items-center w-full max-w-[130px] xs:max-w-[180px] sm:max-w-xs md:w-84 group">
+          <span className="material-symbols-outlined absolute left-2.5 sm:left-3 text-on-surface-variant text-base sm:text-lg pointer-events-none group-focus-within:text-secondary transition-colors">
             search
           </span>
           <input 
             type="text"
             value={searchQuery || ''}
             onChange={handleInputChange}
-            className="w-full pl-9 pr-9 py-2 bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm rounded-xl outline-none shadow-[0_1px_3px_rgba(15,23,42,0.04)] focus:shadow-[0_0_0_2px_rgba(0,81,213,0.3)] border border-transparent focus:border-secondary/20 transition-all" 
-            placeholder="Search projects, stacks, roles..." 
+            className="w-full pl-8 sm:pl-9 pr-7 sm:pr-9 py-1.5 sm:py-2 bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant font-body-sm text-xs sm:text-sm rounded-xl outline-none shadow-[0_1px_3px_rgba(15,23,42,0.04)] focus:shadow-[0_0_0_2px_rgba(0,81,213,0.3)] border border-transparent focus:border-secondary/20 transition-all truncate" 
+            placeholder="Search projects, roles..." 
           />
           {searchQuery ? (
             <button
               type="button"
               onClick={handleClear}
-              className="absolute right-2.5 text-on-surface-variant hover:text-on-surface p-1 transition-colors cursor-pointer"
+              className="absolute right-2 text-on-surface-variant hover:text-on-surface p-1 transition-colors cursor-pointer"
               title="Clear search"
             >
-              <span className="material-symbols-outlined text-sm">close</span>
+              <span className="material-symbols-outlined text-xs sm:text-sm">close</span>
             </button>
           ) : null}
         </div>
 
         {(currentUser?.university || currentUser?.college) && (
-          <div className="hidden lg:flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-md text-label-md select-none">
-            <span className="material-symbols-outlined text-secondary text-base leading-none">school</span>
-            <span>{currentUser.university || currentUser.college}</span>
+          <div className="hidden xl:flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-md text-label-md select-none shrink-0 truncate max-w-xs">
+            <span className="material-symbols-outlined text-secondary text-base leading-none shrink-0">school</span>
+            <span className="truncate">{currentUser.university || currentUser.college}</span>
           </div>
         )}
       </div>

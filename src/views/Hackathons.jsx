@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import HackathonHero from '../components/hackathons/HackathonHero';
 import HackathonCard from '../components/hackathons/HackathonCard';
 import HackathonDetailsModal from '../components/hackathons/HackathonDetailsModal';
@@ -16,7 +16,10 @@ export default function Hackathons({
   onInviteBuilder,
   onCreateSquad,
   showToast,
-  currentUser
+  currentUser,
+  selectedHackathonId = null,
+  onSelectHackathon,
+  onCloseDetails
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusTab, setStatusTab] = useState('all'); // 'all' | 'open' | 'upcoming' | 'finished'
@@ -26,7 +29,27 @@ export default function Hackathons({
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
 
   // Modals state
-  const [selectedHackathon, setSelectedHackathon] = useState(null);
+  const [selectedHackathon, setSelectedHackathon] = useState(() => {
+    if (selectedHackathonId && Array.isArray(hackathons)) {
+      return hackathons.find(h => String(h._id || h.id) === String(selectedHackathonId)) || null;
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (selectedHackathonId && Array.isArray(hackathons)) {
+      const found = hackathons.find(h => String(h._id || h.id) === String(selectedHackathonId));
+      if (found) setSelectedHackathon(found);
+    }
+  }, [selectedHackathonId, hackathons]);
+
+  const handleSelectHackathon = (item) => {
+    setSelectedHackathon(item);
+    if (onSelectHackathon) {
+      onSelectHackathon(item);
+    }
+  };
+
   const [squadUpHackathon, setSquadUpHackathon] = useState(null);
   const [selectedTeamDetails, setSelectedTeamDetails] = useState(null);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
@@ -202,7 +225,7 @@ export default function Hackathons({
         <HackathonHero
           flagship={flagship}
           onFindSquad={() => handleOpenSquadUp(flagship)}
-          onOpenDetails={(h) => setSelectedHackathon(h)}
+          onOpenDetails={(h) => handleSelectHackathon(h)}
         />
       )}
 
@@ -395,7 +418,7 @@ export default function Hackathons({
                     key={h.id}
                     hackathon={h}
                     viewMode="grid"
-                    onSelect={(item) => setSelectedHackathon(item)}
+                    onSelect={(item) => handleSelectHackathon(item)}
                     onFindSquad={() => handleOpenSquadUp(h)}
                   />
                 ))}
@@ -407,7 +430,7 @@ export default function Hackathons({
                     key={h.id}
                     hackathon={h}
                     viewMode="list"
-                    onSelect={(item) => setSelectedHackathon(item)}
+                    onSelect={(item) => handleSelectHackathon(item)}
                     onFindSquad={() => handleOpenSquadUp(h)}
                   />
                 ))}
@@ -441,7 +464,7 @@ export default function Hackathons({
                     key={h.id}
                     hackathon={h}
                     viewMode="grid"
-                    onSelect={(item) => setSelectedHackathon(item)}
+                    onSelect={(item) => handleSelectHackathon(item)}
                     onFindSquad={() => handleOpenSquadUp(h)}
                   />
                 ))}
@@ -453,7 +476,7 @@ export default function Hackathons({
                     key={h.id}
                     hackathon={h}
                     viewMode="list"
-                    onSelect={(item) => setSelectedHackathon(item)}
+                    onSelect={(item) => handleSelectHackathon(item)}
                     onFindSquad={() => handleOpenSquadUp(h)}
                   />
                 ))}
@@ -506,7 +529,10 @@ export default function Hackathons({
       <HackathonDetailsModal
         hackathon={selectedHackathon}
         isOpen={Boolean(selectedHackathon)}
-        onClose={() => setSelectedHackathon(null)}
+        onClose={() => {
+          setSelectedHackathon(null);
+          if (onCloseDetails) onCloseDetails();
+        }}
         onFindSquad={(h) => handleOpenSquadUp(h)}
         onOpenTeamDetails={(team) => setSelectedTeamDetails(team)}
         hackathonSquads={(hackathonSquads || []).filter(sq => sq.hackathonId === (selectedHackathon?._id || selectedHackathon?.id))}

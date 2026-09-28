@@ -7,7 +7,9 @@ export default function Sidebar({
   pendingInvitationsCount = 0,
   pendingApplicationsCount = 0,
   adminTab = 'hackathons',
-  onSelectAdminTab
+  onSelectAdminTab,
+  isMobileOpen = false,
+  onCloseMobile
 }) {
   const isAdmin = currentUser?.role === 'admin';
 
@@ -31,30 +33,45 @@ export default function Sidebar({
 
   const handleNavClick = (id) => {
     setActiveView(id);
+    if (onCloseMobile) onCloseMobile();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  return (
-    <aside className="fixed left-0 top-0 h-full w-72 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex flex-col justify-between select-none">
+  const renderSidebarContent = (isMobile = false) => (
+    <>
       <div className="flex flex-col">
         {/* Brand / Logo */}
-        <div 
-          onClick={() => handleNavClick(isAdmin ? 'admin-dashboard' : 'discover-projects')}
-          className="h-16 px-space-lg flex items-center gap-space-sm cursor-pointer hover:opacity-90 transition-opacity"
-        >
-          <img 
-            alt="BuildCrew Logo" 
-            className="w-8 h-8 rounded-lg object-contain shrink-0" 
-            src="/buildcrew-logo.png"
-          />
-          <div className="flex flex-col">
-            <span className="font-headline-sm text-headline-sm font-bold text-on-surface tracking-tight leading-none">
-              BuildCrew
-            </span>
-            <span className="font-label-sm text-label-sm text-on-surface-variant">
-              Student Collaboration Platform
-            </span>
+        <div className="h-16 px-space-lg flex items-center justify-between">
+          <div 
+            onClick={() => handleNavClick(isAdmin ? 'admin-hackathons' : 'dashboard')}
+            className="flex items-center gap-space-sm cursor-pointer hover:opacity-90 transition-opacity"
+          >
+            <img 
+              alt="BuildCrew Logo" 
+              className="w-8 h-8 rounded-lg object-contain shrink-0" 
+              src="/buildcrew-logo.png"
+            />
+            <div className="flex flex-col">
+              <span className="font-headline-sm text-headline-sm font-bold text-on-surface tracking-tight leading-none">
+                BuildCrew
+              </span>
+              <span className="font-label-sm text-label-sm text-on-surface-variant">
+                Student Collaboration Platform
+              </span>
+            </div>
           </div>
+
+          {/* Close button for mobile drawer */}
+          {isMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="w-8 h-8 rounded-xl flex items-center justify-center text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors cursor-pointer"
+              aria-label="Close Menu"
+            >
+              <span className="material-symbols-outlined text-xl">close</span>
+            </button>
+          )}
         </div>
 
         {/* Post Project Action Button (Available to students only) */}
@@ -84,7 +101,7 @@ export default function Sidebar({
                 type="button"
                 onClick={() => {
                   if (onSelectAdminTab) onSelectAdminTab('hackathons');
-                  handleNavClick('admin-dashboard');
+                  handleNavClick('admin-hackathons');
                 }}
                 className={`w-full flex items-center gap-space-sm px-space-md py-2.5 rounded-xl transition-all font-title-sm text-title-sm text-left ${
                   activeView === 'admin-dashboard' && adminTab === 'hackathons'
@@ -100,7 +117,7 @@ export default function Sidebar({
                 type="button"
                 onClick={() => {
                   if (onSelectAdminTab) onSelectAdminTab('teams');
-                  handleNavClick('admin-dashboard');
+                  handleNavClick('admin-teams');
                 }}
                 className={`w-full flex items-center gap-space-sm px-space-md py-2.5 rounded-xl transition-all font-title-sm text-title-sm text-left ${
                   activeView === 'admin-dashboard' && (adminTab === 'teams' || adminTab === 'projects')
@@ -250,6 +267,32 @@ export default function Sidebar({
           </div>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop Fixed Sidebar (Preserved exactly as is on desktop screens >= 1024px) */}
+      <aside className="hidden lg:flex fixed left-0 top-0 h-full w-72 bg-surface-container-lowest shadow-[0_1px_8px_rgba(0,0,0,0.04)] z-50 flex-col justify-between select-none">
+        {renderSidebarContent(false)}
+      </aside>
+
+      {/* Mobile Slide-Over Drawer Navigation (Screens < 1024px) */}
+      {isMobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop Blur Overlay */}
+          <div 
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-300"
+            onClick={onCloseMobile}
+            aria-hidden="true"
+          />
+
+          {/* Slide-in Mobile Drawer */}
+          <aside className="fixed left-0 top-0 h-full w-72 max-w-[85vw] bg-surface-container-lowest shadow-2xl z-50 flex flex-col justify-between select-none animate-slideRight">
+            {renderSidebarContent(true)}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

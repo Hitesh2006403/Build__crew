@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import CommandPalette from './components/CommandPalette';
@@ -26,16 +27,262 @@ import invitationsApi from './api/invitations';
 import notificationsApi from './api/notifications';
 import { API_BASE_URL } from './api/client';
 
-export default function App() {
-  // Authentication & Role Routing state - initialized from localStorage if available
-  const [currentUser, setCurrentUser] = useState(() => authApi.getStoredUser());
-  const [activeView, setActiveView] = useState(() => {
-    const stored = authApi.getStoredUser();
-    return stored?.role === 'admin' ? 'admin-dashboard' : 'discover-projects';
+// =========================================================================
+// ROUTE WRAPPERS FOR DIRECT URL ACCESS & BROWSER REFRESH SUPPORT
+// =========================================================================
+
+function ProjectDetailsRoute({ projects, currentUser, onApplySuccess, onViewProfile, showToast }) {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [project, setProject] = useState(() => {
+    return projects.find(p => String(p._id || p.id) === String(id)) || null;
   });
-  const [viewingProfileUserId, setViewingProfileUserId] = useState(null);
+  const [loading, setLoading] = useState(!project);
+
+  useEffect(() => {
+    const found = projects.find(p => String(p._id || p.id) === String(id));
+    if (found) {
+      setProject(found);
+      setLoading(false);
+    } else {
+      setLoading(true);
+      projectsApi.getProjectById(id)
+        .then(res => {
+          const loaded = res.project || res;
+          if (loaded) setProject(loaded);
+        })
+        .catch(err => {
+          console.warn('Could not load project:', err);
+          showToast?.('Project could not be found.');
+          navigate('/projects', { replace: true });
+        })
+        .finally(() => setLoading(false));
+    }
+  }, [id, projects, navigate, showToast]);
+
+  if (loading && !project) {
+    return (
+      <div className="flex flex-col items-center justify-center p-16 text-on-surface-variant min-h-[50vh]">
+        <span className="material-symbols-outlined animate-spin text-4xl text-secondary mb-3">progress_activity</span>
+        <p className="font-body-md text-body-md">Loading project specifications...</p>
+      </div>
+    );
+  }
+
+  if (!project) return null;
+
+  return (
+    <ProjectDetails
+      project={project}
+      onBack={() => navigate('/projects')}
+      onApplySuccess={onApplySuccess}
+      onViewProfile={onViewProfile}
+      currentUser={currentUser}
+    />
+  );
+}
+
+function HackathonDetailsRoute({ hackathons, ...props }) {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  return (
+    <Hackathons
+      {...props}
+      hackathons={hackathons.filter(h => h.isPublished !== false)}
+      selectedHackathonId={id}
+      onSelectHackathon={(h) => navigate(`/hackathons/${h._id || h.id}`)}
+      onCloseDetails={() => navigate('/hackathons')}
+    />
+  );
+}
+
+function ProfileRoute({ currentUser, sentInvitations, onInviteBuilder, onUpdateUser, showToast }) {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  return (
+    <Profile
+      currentUser={currentUser}
+      targetUserId={id || null}
+      sentInvitations={sentInvitations}
+      onBack={() => navigate(-1)}
+      onInviteBuilder={onInviteBuilder}
+      onUpdateUser={onUpdateUser}
+      showToast={showToast}
+    />
+  );
+}
+
+function AdminHackathonEditRoute(props) {
+  const { id } = useParams();
+  const navigate = useNavigate();
+
+  if (props.currentUser?.role !== 'admin') {
+    return <AccessDenied onBack={() => navigate('/dashboard')} />;
+  }
+
+  return (
+    <AdminDashboard
+      {...props}
+      initialTab="hackathons"
+      initialView="form"
+      initialEditingId={id}
+      onNavigateRoute={navigate}
+    />
+  );
+}
+
+function MyTeamsView({ currentUser, projects, hackathonSquads, onSelectProject }) {
+  const currentUserId = String(currentUser?._id || currentUser?.id || '');
+  
+  const myProjectTeams = useMemo(() => {
+    return projects.filter(p => {
+      if (!currentUser) return false;
+      const ownerId = String(p.createdBy?._id || p.createdBy || '');
+      const isOwner = ownerId && ownerId === currentUserId;
+      const isMember = Array.isArray(p.members) && p.members.some(m => String(m._id || m || '') === currentUserId);
+      return isOwner || isMember;
+    });
+  }, [projects, currentUser, currentUserId]);
+
+  const myHackTeams = useMemo(() => {
+    return hackathonSquads.filter(h => {
+      if (!currentUser) return false;
+      const ownerId = String(h.createdBy?._id || h.createdBy || '');
+      const isOwner = ownerId && ownerId === currentUserId;
+      const isMember = Array.isArray(h.members) && h.members.some(m => String(m._id || m || '') === currentUserId);
+      return isOwner || isMember;
+    });
+  }, [hackathonSquads, currentUser, currentUserId]);
+
+  const hasAnyTeams = myProjectTeams.length > 0 || myHackTeams.length > 0;
+
+  return (
+    <div className="flex flex-col w-full pb-space-xl space-y-space-lg">
+      <div className="flex flex-col max-w-3xl">
+        <div className="flex items-center gap-space-xs text-secondary font-label-md text-label-md uppercase tracking-wider mb-1">
+          <span className="material-symbols-outlined text-base">diversity_3</span>
+          <span>Your Teams</span>
+        </div>
+        <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
+          My Teams
+        </h1>
+        <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
+          Teams and projects you are currently collaborating in.
+        </p>
+      </div>
+
+      {!hasAnyTeams ? (
+        <div className="bg-surface-container-lowest rounded-2xl p-space-xl text-center text-on-surface-variant border border-surface-container-high/40">
+          <span className="material-symbols-outlined text-4xl text-outline mb-2">diversity_3</span>
+          <p className="font-body-lg text-body-lg text-on-surface font-semibold">You haven't joined any teams yet</p>
+          <p className="font-body-sm text-body-sm mt-1">Explore Discover Projects or accept team invitations to join a team.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+          {/* Project Teams */}
+          {myProjectTeams.map((p, idx) => {
+            const isOwner = currentUser && ((p.createdBy?._id || p.createdBy) === currentUser._id);
+            return (
+              <div key={p._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full bg-surface-container text-secondary font-label-sm text-label-sm font-semibold">
+                      {p.categoryBadge || p.category || 'Project'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      isOwner ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface-variant'
+                    }`}>
+                      {isOwner ? 'Creator' : 'Member'}
+                    </span>
+                  </div>
+                  <span className="font-label-sm text-label-sm text-secondary font-semibold">
+                    {Math.min(Array.isArray(p.members) && p.members.length > 0 ? p.members.length : (p.filledCount || 1), p.totalCapacity || 4)}/{p.totalCapacity || 4} Members
+                  </span>
+                </div>
+                <div>
+                  <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
+                    {p.title}
+                  </h3>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
+                    {p.tagline || p.whatAreYouBuilding || p.problemBeingSolved || p.fullDescription}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
+                  <span className="text-on-surface font-medium">Created By</span>
+                  <span className="text-secondary font-semibold">{p.lead?.name || p.createdBy?.name || 'Project Creator'}</span>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-high/60">
+                  <button
+                    type="button"
+                    onClick={() => onSelectProject(p)}
+                    className="py-2 px-4 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm hover:bg-surface-tint transition-all cursor-pointer shadow-xs"
+                  >
+                    View Project &amp; Team
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Hackathon Teams */}
+          {myHackTeams.map((h, idx) => {
+            const isOwner = currentUser && ((h.createdBy?._id || h.createdBy) === currentUser._id);
+            return (
+              <div key={h._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 font-label-sm text-label-sm font-semibold">
+                      {h.hackathonTitle || 'Hackathon Team'}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                      isOwner ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface-variant'
+                    }`}>
+                      {isOwner ? 'Creator' : 'Member'}
+                    </span>
+                  </div>
+                  <span className="font-label-sm text-label-sm text-secondary font-semibold">
+                    {Math.min(Array.isArray(h.members) && h.members.length > 0 ? h.members.length : (h.filledCount || 1), h.totalCapacity || 4)}/{h.totalCapacity || 4} Members
+                  </span>
+                </div>
+                <div>
+                  <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
+                    {h.teamName || h.title}
+                  </h3>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
+                    {h.tagline || h.description || `Competing in ${h.hackathonTitle || 'Hackathon'}`}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
+                  <span className="text-on-surface font-medium">Team Lead</span>
+                  <span className="text-secondary font-semibold">{h.lead?.name || h.createdBy?.name || 'Team Lead'}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =========================================================================
+// MAIN BUILDCREW APPLICATION COMPONENT
+// =========================================================================
+
+export default function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const pathname = location.pathname;
+
+  // Authentication & Session state - initialized from localStorage if available
+  const [currentUser, setCurrentUser] = useState(() => authApi.getStoredUser());
   const [isAuthResolving, setIsAuthResolving] = useState(() => Boolean(authApi.getToken()));
   const [applicationsTab, setApplicationsTab] = useState('received');
+
+  // Mobile drawer state
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   // Backend Hydrated States from MongoDB Atlas
   const [projects, setProjects] = useState([]);
@@ -55,7 +302,6 @@ export default function App() {
   const [isPostProjectOpen, setIsPostProjectOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [adminTab, setAdminTab] = useState('hackathons');
 
   // Opening Splash Screen State
   const [showSplash, setShowSplash] = useState(true);
@@ -68,10 +314,29 @@ export default function App() {
   const knownNotificationIdsRef = useRef(new Set());
   const isFirstNotifLoadRef = useRef(true);
 
-  const showToast = (msg) => {
+  // Derive active view and admin tab cleanly from the browser URL pathname
+  const activeView = useMemo(() => {
+    if (pathname.startsWith('/admin')) return 'admin-dashboard';
+    if (pathname.startsWith('/hackathons')) return 'hackathons';
+    if (pathname.startsWith('/find-teammates')) return 'find-builders';
+    if (pathname.startsWith('/my-projects')) return 'my-projects';
+    if (pathname.startsWith('/applications')) return 'my-applications';
+    if (pathname.startsWith('/invitations')) return 'invitations';
+    if (pathname.startsWith('/teams')) return 'my-teams';
+    if (pathname.startsWith('/settings')) return 'settings';
+    if (pathname.startsWith('/profile')) return 'profile';
+    return 'discover-projects';
+  }, [pathname]);
+
+  const adminTab = useMemo(() => {
+    if (pathname.startsWith('/admin/teams')) return 'teams';
+    return 'hackathons';
+  }, [pathname]);
+
+  const showToast = useCallback((msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
-  };
+  }, []);
 
   const showNotificationToast = useCallback((notif) => {
     if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
@@ -81,9 +346,7 @@ export default function App() {
     }, 4500);
   }, []);
 
-  // =========================================================================
-  // 🔌 Fetch Platform Data from MongoDB API
-  // =========================================================================
+  // 🔌 Data fetching from MongoDB API
   const fetchHackathons = useCallback(async () => {
     try {
       const data = await hackathonsApi.getHackathons();
@@ -143,7 +406,6 @@ export default function App() {
           });
           isFirstNotifLoadRef.current = false;
         } else {
-          // Identify unread notifications that arrived since last check
           const newNotifs = notifs.filter(n => n._id && !knownNotificationIdsRef.current.has(String(n._id)) && !n.read);
           notifs.forEach(n => {
             if (n._id) knownNotificationIdsRef.current.add(String(n._id));
@@ -191,7 +453,6 @@ export default function App() {
     let isMounted = true;
     let removeTimeoutId = null;
 
-    // Safety timeout: ensure loading screen is never stuck
     const safetyTimer = setTimeout(() => {
       if (isMounted) {
         setIsAuthResolving(false);
@@ -206,7 +467,6 @@ export default function App() {
       try {
         setBackendError(null);
 
-        // Run authentication verification and database bootstrap concurrently
         const storedToken = authApi.getToken();
         const authPromise = storedToken
           ? authApi.getMe().catch(() => {
@@ -224,14 +484,8 @@ export default function App() {
         if (isMounted) {
           if (authResult?.user) {
             setCurrentUser(authResult.user);
-            if (authResult.user.role === 'admin') {
-              setActiveView('admin-dashboard');
-            } else {
-              setActiveView('discover-projects');
-            }
           } else if (storedToken && !authResult) {
             setCurrentUser(null);
-            setActiveView('discover-projects');
           }
 
           if (bootstrapResult?.data) {
@@ -280,23 +534,36 @@ export default function App() {
     };
   }, [fetchBuilders, fetchHackathons, fetchProjects, fetchUserData]);
 
-  // Auth Handlers
+  // Auth Handlers with React Router URL redirection
   const handleLoginSuccess = async (user) => {
     setCurrentUser(user);
     if (user.role === 'admin') {
-      setActiveView('admin-dashboard');
+      navigate('/admin/hackathons', { replace: true });
       showToast(`Welcome to BuildCrew Admin Console, ${user.name}!`);
     } else {
-      setActiveView('discover-projects');
+      navigate('/dashboard', { replace: true });
       showToast(`Welcome back to campus circuit, ${user.name}!`);
     }
-    // Refresh user-specific data from MongoDB
     await fetchUserData();
     await fetchHackathons();
     await fetchProjects();
   };
 
-  // Real-time polling for application/invitation events when user is logged in
+  const handleLogout = () => {
+    authApi.logout();
+    setCurrentUser(null);
+    setApplications([]);
+    setNotifications([]);
+    setReceivedInvitations([]);
+    setSentInvitations([]);
+    knownNotificationIdsRef.current.clear();
+    isFirstNotifLoadRef.current = true;
+    setPopupNotification(null);
+    navigate('/login', { replace: true });
+    showToast('Signed out of BuildCrew session.');
+  };
+
+  // Real-time polling for application/invitation events
   useEffect(() => {
     if (!currentUser) return;
     let isPolling = false;
@@ -313,11 +580,7 @@ export default function App() {
     };
 
     const intervalId = setInterval(poll, 7000);
-
-    const onFocus = () => {
-      poll();
-    };
-
+    const onFocus = () => { poll(); };
     window.addEventListener('focus', onFocus);
 
     return () => {
@@ -326,20 +589,7 @@ export default function App() {
     };
   }, [currentUser, fetchUserData]);
 
-  const handleLogout = () => {
-    authApi.logout();
-    setCurrentUser(null);
-    setActiveView('discover-projects');
-    setApplications([]);
-    setNotifications([]);
-    setReceivedInvitations([]);
-    setSentInvitations([]);
-    knownNotificationIdsRef.current.clear();
-    isFirstNotifLoadRef.current = true;
-    setPopupNotification(null);
-    showToast('Signed out of BuildCrew session.');
-  };
-
+  // User Profile & Avatar Synchronization
   const handleUpdateUser = (updatedUser) => {
     if (!updatedUser) return;
     setCurrentUser(updatedUser);
@@ -352,7 +602,7 @@ export default function App() {
     const updatedAvatar = updatedUser.avatar || updatedUser.profileImage || '';
     const userIdStr = String(updatedUser._id || updatedUser.id);
 
-    // 1. Synchronize projects state (createdBy, lead, and confirmed members)
+    // Synchronize projects state
     setProjects(prevProjects =>
       prevProjects.map(proj => {
         let modified = false;
@@ -390,44 +640,7 @@ export default function App() {
       })
     );
 
-    // 2. Synchronize selectedProject if currently viewing
-    setSelectedProject(prev => {
-      if (!prev) return null;
-      let modified = false;
-      const newProj = { ...prev };
-
-      const creatorId = typeof newProj.createdBy === 'object' && newProj.createdBy !== null
-        ? String(newProj.createdBy._id || newProj.createdBy.id)
-        : String(newProj.createdBy);
-
-      if (creatorId && creatorId === userIdStr) {
-        modified = true;
-        newProj.createdBy = typeof newProj.createdBy === 'object' && newProj.createdBy !== null
-          ? { ...newProj.createdBy, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name }
-          : { _id: updatedUser._id, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name };
-        if (newProj.lead) {
-          newProj.lead = { ...newProj.lead, avatar: updatedAvatar, leadAvatarFull: updatedAvatar, name: updatedUser.name };
-        }
-      }
-
-      if (Array.isArray(newProj.members)) {
-        const updatedMembers = newProj.members.map(m => {
-          const mId = typeof m === 'object' && m !== null ? String(m._id || m.id) : String(m);
-          if (mId && mId === userIdStr) {
-            modified = true;
-            return typeof m === 'object' && m !== null
-              ? { ...m, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name }
-              : { _id: updatedUser._id, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name };
-          }
-          return m;
-        });
-        if (modified) newProj.members = updatedMembers;
-      }
-
-      return modified ? newProj : prev;
-    });
-
-    // 3. Synchronize builders state
+    // Synchronize builders state
     setBuilders(prev =>
       prev.map(b => {
         if (String(b._id || b.id) === userIdStr) {
@@ -437,7 +650,7 @@ export default function App() {
       })
     );
 
-    // 4. Synchronize applications state
+    // Synchronize applications state
     setApplications(prev =>
       prev.map(app => {
         const applicantId = typeof app.applicant === 'object' && app.applicant !== null
@@ -476,35 +689,78 @@ export default function App() {
     setHackathons(list);
   };
 
-  // Nav actions
-  const handleViewProfile = (userId) => {
-    setViewingProfileUserId(userId);
-    setActiveView('profile');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleNavigateView = (view) => {
-    if (view === 'profile' || view === 'settings') {
-      setViewingProfileUserId(null);
-    }
-    setActiveView(view);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSelectProject = (proj) => {
-    setSelectedProject(proj);
-    setActiveView('project-details');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const handleSelectProjectById = (id) => {
-    const found = projects.find(p => (p._id === id || p.id === id));
-    if (found) {
-      handleSelectProject(found);
+  // URL-driven navigation actions
+  const handleViewProfile = useCallback((userId) => {
+    if (userId) {
+      navigate(`/profile/${userId}`);
     } else {
-      setActiveView('discover-projects');
+      navigate('/profile');
     }
-  };
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [navigate]);
+
+  const handleNavigateView = useCallback((view) => {
+    setIsMobileNavOpen(false);
+    switch (view) {
+      case 'dashboard':
+        navigate('/dashboard');
+        break;
+      case 'discover-projects':
+      case 'projects':
+        navigate('/projects');
+        break;
+      case 'create-project':
+      case 'post-project':
+        navigate('/create-project');
+        break;
+      case 'hackathons':
+        navigate('/hackathons');
+        break;
+      case 'find-builders':
+      case 'find-teammates':
+        navigate('/find-teammates');
+        break;
+      case 'my-projects':
+        navigate('/my-projects');
+        break;
+      case 'my-applications':
+      case 'applications':
+        navigate('/applications');
+        break;
+      case 'invitations':
+        navigate('/invitations');
+        break;
+      case 'my-teams':
+      case 'teams':
+        navigate('/teams');
+        break;
+      case 'settings':
+        navigate('/settings');
+        break;
+      case 'profile':
+        navigate('/profile');
+        break;
+      case 'admin-dashboard':
+      case 'admin-hackathons':
+        navigate('/admin/hackathons');
+        break;
+      case 'admin-teams':
+        navigate('/admin/teams');
+        break;
+      default:
+        navigate('/dashboard');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [navigate]);
+
+  const handleSelectProject = useCallback((proj) => {
+    const id = proj?._id || proj?.id;
+    if (id) {
+      setSelectedProject(proj);
+      navigate(`/projects/${id}`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [navigate]);
 
   const handleQuickApply = (proj) => {
     setQuickApplyProject(proj);
@@ -521,7 +777,6 @@ export default function App() {
       const savedApp = res.application || res;
       setApplications(prev => [savedApp, ...prev.filter(a => String(a._id || a.id) !== String(savedApp._id || savedApp.id))]);
       showToast('Application sent to the project owner.');
-      // Re-sync projects and notifications in background
       fetchProjects();
       fetchUserData();
       return savedApp;
@@ -552,7 +807,8 @@ export default function App() {
       const savedProj = res.project || res;
       setProjects(prev => [savedProj, ...prev]);
       setSelectedProject(savedProj);
-      setActiveView('project-details');
+      setIsPostProjectOpen(false);
+      navigate(`/projects/${savedProj._id || savedProj.id}`);
       showToast(`Project "${savedProj.title}" launched successfully!`);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
@@ -579,6 +835,9 @@ export default function App() {
         fetchUserData()
       ]);
       showToast(res?.message || 'Project and associated team data deleted permanently.');
+      if (pathname.includes(projectId)) {
+        navigate('/projects');
+      }
       return res;
     } catch (err) {
       console.error('Delete project failed:', err);
@@ -666,7 +925,6 @@ export default function App() {
     }
   };
 
-  // Notification actions
   const handleMarkNotificationRead = async (id) => {
     try {
       await notificationsApi.markAsRead(id);
@@ -687,9 +945,7 @@ export default function App() {
     }
   };
 
-  // While authentication and the current user are being loaded:
-  // Render ONLY the BuildCrew loading / splash screen.
-  // Never temporarily render the Admin page or any other default page while authentication is loading.
+  // While authenticating: render splash loading screen
   if (isAuthResolving) {
     return (
       <div className="fixed inset-0 z-[99999] bg-white flex flex-col items-center justify-center select-none">
@@ -704,11 +960,12 @@ export default function App() {
     );
   }
 
-  // If unauthenticated: render complete Auth flow
+  // =========================================================================
+  // UNAUTHENTICATED ROUTING FLOW (/login, /register, /forgot-password, /reset-password)
+  // =========================================================================
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-background font-body-md text-on-surface antialiased relative">
-        {/* Opening Splash Screen centered on clean white background */}
         {showSplash && (
           <div 
             className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ease-in-out ${
@@ -725,7 +982,57 @@ export default function App() {
           </div>
         )}
 
-        <Auth onLoginSuccess={handleLoginSuccess} />
+        <Routes>
+          <Route path="/login" element={
+            <Auth
+              onLoginSuccess={handleLoginSuccess}
+              initialMode="login"
+              onModeChange={(mode) => {
+                if (mode === 'register') navigate('/register');
+                else if (mode === 'forgot') navigate('/forgot-password');
+                else if (mode === 'reset') navigate('/reset-password');
+                else navigate('/login');
+              }}
+            />
+          } />
+          <Route path="/register" element={
+            <Auth
+              onLoginSuccess={handleLoginSuccess}
+              initialMode="register"
+              onModeChange={(mode) => {
+                if (mode === 'login') navigate('/login');
+                else if (mode === 'forgot') navigate('/forgot-password');
+                else if (mode === 'reset') navigate('/reset-password');
+                else navigate('/register');
+              }}
+            />
+          } />
+          <Route path="/forgot-password" element={
+            <Auth
+              onLoginSuccess={handleLoginSuccess}
+              initialMode="forgot"
+              onModeChange={(mode) => {
+                if (mode === 'login') navigate('/login');
+                else if (mode === 'register') navigate('/register');
+                else if (mode === 'reset') navigate('/reset-password');
+                else navigate('/forgot-password');
+              }}
+            />
+          } />
+          <Route path="/reset-password" element={
+            <Auth
+              onLoginSuccess={handleLoginSuccess}
+              initialMode="reset"
+              onModeChange={(mode) => {
+                if (mode === 'login') navigate('/login');
+                else if (mode === 'register') navigate('/register');
+                else if (mode === 'forgot') navigate('/forgot-password');
+                else navigate('/reset-password');
+              }}
+            />
+          } />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
 
         {backendError && (
           <div className="fixed bottom-6 left-6 z-50 bg-error-container text-on-error-container px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 font-body-sm text-body-sm">
@@ -751,7 +1058,9 @@ export default function App() {
     );
   }
 
-  // Filter notifications: do not exclude invitation_received so users receive team invitation alerts
+  // =========================================================================
+  // AUTHENTICATED APPLICATION SHELL & COMPLETE ROUTES
+  // =========================================================================
   const unreadCount = notifications.filter(n => !n.read).length;
   const currentUserId = String(currentUser?._id || currentUser?.id || '');
   const pendingReceivedApplicationsCount = applications.filter(a => {
@@ -761,7 +1070,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col font-body-md antialiased relative">
-      {/* Opening Splash Screen centered on clean white background */}
+      {/* Splash Screen on initial load */}
       {showSplash && (
         <div 
           className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ease-in-out ${
@@ -778,30 +1087,33 @@ export default function App() {
         </div>
       )}
 
-      {/* Fixed Navigation Sidebar */}
+      {/* Navigation Sidebar (Desktop fixed sidebar + Mobile slide-over drawer) */}
       <Sidebar
         activeView={activeView}
         setActiveView={handleNavigateView}
-        onOpenPostProject={() => setIsPostProjectOpen(true)}
+        onOpenPostProject={() => navigate('/create-project')}
         currentUser={currentUser}
         onLogout={handleLogout}
         pendingInvitationsCount={receivedInvitations.filter(i => i.status === 'pending').length}
         pendingApplicationsCount={pendingReceivedApplicationsCount}
         adminTab={adminTab}
-        onSelectAdminTab={setAdminTab}
+        onSelectAdminTab={(tab) => navigate(tab === 'teams' ? '/admin/teams' : '/admin/hackathons')}
+        isMobileOpen={isMobileNavOpen}
+        onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
-      {/* Main Content Area (Offset by Sidebar: pl-72) */}
-      <div className="pl-72 min-h-screen flex flex-col">
+      {/* Main Content Area (Mobile: pl-0, Desktop: pl-72) */}
+      <div className="pl-0 lg:pl-72 min-h-screen flex flex-col w-full max-w-full overflow-x-hidden">
         {/* Sticky Top Header */}
         <Header
           activeView={activeView}
+          onOpenMobileNav={() => setIsMobileNavOpen(true)}
           onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           onSearchFocus={() => {
-            if (activeView !== 'discover-projects') {
-              handleNavigateView('discover-projects');
+            if (!pathname.startsWith('/projects') && pathname !== '/dashboard') {
+              navigate('/projects');
             }
           }}
           notificationCount={unreadCount}
@@ -812,22 +1124,232 @@ export default function App() {
           onNavigateInvitations={() => handleNavigateView('invitations')}
           onNavigateApplications={(tab = 'received') => {
             setApplicationsTab(tab);
-            handleNavigateView('my-applications');
+            handleNavigateView('applications');
           }}
           currentUser={currentUser}
           onLogout={handleLogout}
           onOpenAdminDashboard={(tab = 'hackathons') => {
-            setAdminTab(tab);
-            handleNavigateView('admin-dashboard');
+            navigate(tab === 'teams' ? '/admin/teams' : '/admin/hackathons');
           }}
+          onNavigateHome={() => navigate(currentUser?.role === 'admin' ? '/admin/hackathons' : '/dashboard')}
         />
 
         {/* Dynamic View Router */}
-        <main className="w-full pt-16 bg-surface min-h-screen px-space-lg py-space-lg flex-1">
-          {/* Admin Hackathon & Team Management (Protected for role='admin', AccessDenied fallback for students) */}
-          {activeView === 'admin-dashboard' && (
-            currentUser?.role === 'admin' ? (
-              <AdminDashboard
+        <main className="w-full pt-16 bg-surface min-h-screen px-3 sm:px-4 lg:px-space-lg py-4 sm:py-space-lg pb-24 lg:pb-space-lg flex-1 overflow-x-hidden">
+          <Routes>
+            {/* Student Platform Routes */}
+            <Route path="/dashboard" element={
+              <DiscoverProjects
+                projects={projects}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                onSelectProject={handleSelectProject}
+                onQuickApply={handleQuickApply}
+                currentUser={currentUser}
+                builders={builders}
+              />
+            } />
+            <Route path="/projects" element={
+              <DiscoverProjects
+                projects={projects}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                onSelectProject={handleSelectProject}
+                onQuickApply={handleQuickApply}
+                currentUser={currentUser}
+                builders={builders}
+              />
+            } />
+            <Route path="/projects/:id" element={
+              <ProjectDetailsRoute
+                projects={projects}
+                currentUser={currentUser}
+                onApplySuccess={handleApplySuccess}
+                onViewProfile={handleViewProfile}
+                showToast={showToast}
+              />
+            } />
+            <Route path="/create-project" element={
+              <DiscoverProjects
+                projects={projects}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                onSelectProject={handleSelectProject}
+                onQuickApply={handleQuickApply}
+                currentUser={currentUser}
+                builders={builders}
+              />
+            } />
+            <Route path="/my-projects" element={
+              <MyProjects
+                projects={projects}
+                currentUser={currentUser}
+                onSelectProject={handleSelectProject}
+                onOpenPostProject={() => navigate('/create-project')}
+              />
+            } />
+            <Route path="/applications" element={
+              <MyApplications
+                applications={applications}
+                currentUser={currentUser}
+                onSelectProjectById={(id) => navigate(`/projects/${id}`)}
+                initialTab={applicationsTab}
+                onTabChange={setApplicationsTab}
+                onUpdateStatus={handleUpdateApplicationStatus}
+              />
+            } />
+            <Route path="/invitations" element={
+              <Invitations
+                receivedInvitations={receivedInvitations}
+                sentInvitations={sentInvitations}
+                onAcceptInvitation={handleAcceptInvitation}
+                onRejectInvitation={handleRejectInvitation}
+                onCancelInvitation={handleCancelInvitation}
+                onViewProfile={handleViewProfile}
+                onSelectProject={handleSelectProject}
+                currentUser={currentUser}
+              />
+            } />
+            <Route path="/teams" element={
+              <MyTeamsView
+                currentUser={currentUser}
+                projects={projects}
+                hackathonSquads={hackathonSquads}
+                onSelectProject={handleSelectProject}
+              />
+            } />
+            <Route path="/teams/:id" element={
+              <ProjectDetailsRoute
+                projects={projects}
+                currentUser={currentUser}
+                onApplySuccess={handleApplySuccess}
+                onViewProfile={handleViewProfile}
+                showToast={showToast}
+              />
+            } />
+            <Route path="/find-teammates" element={
+              <FindBuilders
+                builders={builders}
+                projects={projects}
+                hackathonSquads={hackathonSquads}
+                sentInvitations={sentInvitations}
+                onInvite={handleInviteBuilder}
+                onViewProfile={handleViewProfile}
+                onAddBuilder={handleAddBuilder}
+                showToast={showToast}
+                currentUser={currentUser}
+              />
+            } />
+            <Route path="/profile" element={
+              <Profile
+                currentUser={currentUser}
+                targetUserId={null}
+                sentInvitations={sentInvitations}
+                onBack={() => navigate('/find-teammates')}
+                onInviteBuilder={handleInviteBuilder}
+                onUpdateUser={handleUpdateUser}
+                showToast={showToast}
+              />
+            } />
+            <Route path="/profile/:id" element={
+              <ProfileRoute
+                currentUser={currentUser}
+                sentInvitations={sentInvitations}
+                onInviteBuilder={handleInviteBuilder}
+                onUpdateUser={handleUpdateUser}
+                showToast={showToast}
+              />
+            } />
+            <Route path="/settings" element={
+              <Profile
+                currentUser={currentUser}
+                targetUserId={null}
+                sentInvitations={sentInvitations}
+                onBack={() => navigate('/dashboard')}
+                onInviteBuilder={handleInviteBuilder}
+                onUpdateUser={handleUpdateUser}
+                showToast={showToast}
+              />
+            } />
+            <Route path="/hackathons" element={
+              <Hackathons
+                hackathons={hackathons.filter(h => h.isPublished !== false)}
+                squadWins={squadWins}
+                projects={projects}
+                builders={builders}
+                hackathonSquads={hackathonSquads}
+                onApplySquad={handleApplySuccess}
+                onInviteBuilder={handleInviteBuilder}
+                onCreateSquad={handleAddProject}
+                onAddHackathon={handleAddHackathon}
+                showToast={showToast}
+                currentUser={currentUser}
+                onSelectHackathon={(h) => navigate(`/hackathons/${h._id || h.id}`)}
+              />
+            } />
+            <Route path="/hackathons/:id" element={
+              <HackathonDetailsRoute
+                hackathons={hackathons}
+                squadWins={squadWins}
+                projects={projects}
+                builders={builders}
+                hackathonSquads={hackathonSquads}
+                onApplySquad={handleApplySuccess}
+                onInviteBuilder={handleInviteBuilder}
+                onCreateSquad={handleAddProject}
+                onAddHackathon={handleAddHackathon}
+                showToast={showToast}
+                currentUser={currentUser}
+              />
+            } />
+
+            {/* Admin Management Routes */}
+            <Route path="/admin/hackathons" element={
+              currentUser?.role === 'admin' ? (
+                <AdminDashboard
+                  currentUser={currentUser}
+                  hackathons={hackathons}
+                  projects={projects}
+                  onUpdateHackathons={handleUpdateHackathons}
+                  onRefreshHackathons={fetchHackathons}
+                  onRefreshProjects={fetchProjects}
+                  onUpdateProject={handleUpdateProject}
+                  onDeleteProject={handleDeleteProject}
+                  onSelectProject={handleSelectProject}
+                  showToast={showToast}
+                  onNavigate={handleNavigateView}
+                  onNavigateRoute={navigate}
+                  initialTab="hackathons"
+                  initialView="list"
+                />
+              ) : (
+                <AccessDenied onBack={() => navigate('/dashboard')} />
+              )
+            } />
+            <Route path="/admin/hackathons/new" element={
+              currentUser?.role === 'admin' ? (
+                <AdminDashboard
+                  currentUser={currentUser}
+                  hackathons={hackathons}
+                  projects={projects}
+                  onUpdateHackathons={handleUpdateHackathons}
+                  onRefreshHackathons={fetchHackathons}
+                  onRefreshProjects={fetchProjects}
+                  onUpdateProject={handleUpdateProject}
+                  onDeleteProject={handleDeleteProject}
+                  onSelectProject={handleSelectProject}
+                  showToast={showToast}
+                  onNavigate={handleNavigateView}
+                  onNavigateRoute={navigate}
+                  initialTab="hackathons"
+                  initialView="form"
+                />
+              ) : (
+                <AccessDenied onBack={() => navigate('/dashboard')} />
+              )
+            } />
+            <Route path="/admin/hackathons/:id/edit" element={
+              <AdminHackathonEditRoute
                 currentUser={currentUser}
                 hackathons={hackathons}
                 projects={projects}
@@ -838,245 +1360,140 @@ export default function App() {
                 onDeleteProject={handleDeleteProject}
                 onSelectProject={handleSelectProject}
                 showToast={showToast}
-                onNavigate={setActiveView}
-                initialTab={adminTab}
+                onNavigate={handleNavigateView}
               />
-            ) : (
-              <AccessDenied onBack={() => setActiveView('discover-projects')} />
-            )
-          )}
+            } />
+            <Route path="/admin/teams" element={
+              currentUser?.role === 'admin' ? (
+                <AdminDashboard
+                  currentUser={currentUser}
+                  hackathons={hackathons}
+                  projects={projects}
+                  onUpdateHackathons={handleUpdateHackathons}
+                  onRefreshHackathons={fetchHackathons}
+                  onRefreshProjects={fetchProjects}
+                  onUpdateProject={handleUpdateProject}
+                  onDeleteProject={handleDeleteProject}
+                  onSelectProject={handleSelectProject}
+                  showToast={showToast}
+                  onNavigate={handleNavigateView}
+                  onNavigateRoute={navigate}
+                  initialTab="teams"
+                  initialView="list"
+                />
+              ) : (
+                <AccessDenied onBack={() => navigate('/dashboard')} />
+              )
+            } />
 
-          {activeView === 'discover-projects' && (
-            <DiscoverProjects
-              projects={projects}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              onSelectProject={handleSelectProject}
-              onQuickApply={handleQuickApply}
-              currentUser={currentUser}
-              builders={builders}
-            />
-          )}
+            {/* Auth URLs redirect to role-specific dashboard when user is logged in */}
+            <Route path="/login" element={<Navigate to={currentUser?.role === 'admin' ? '/admin/hackathons' : '/dashboard'} replace />} />
+            <Route path="/register" element={<Navigate to={currentUser?.role === 'admin' ? '/admin/hackathons' : '/dashboard'} replace />} />
+            <Route path="/forgot-password" element={<Navigate to={currentUser?.role === 'admin' ? '/admin/hackathons' : '/dashboard'} replace />} />
+            <Route path="/reset-password" element={<Navigate to={currentUser?.role === 'admin' ? '/admin/hackathons' : '/dashboard'} replace />} />
+            <Route path="/" element={<Navigate to={currentUser?.role === 'admin' ? '/admin/hackathons' : '/dashboard'} replace />} />
 
-          {activeView === 'project-details' && selectedProject && (
-            <ProjectDetails
-              project={selectedProject}
-              onBack={() => handleNavigateView('discover-projects')}
-              onApplySuccess={handleApplySuccess}
-              onViewProfile={handleViewProfile}
-              currentUser={currentUser}
-            />
-          )}
-
-          {activeView === 'hackathons' && (
-            <Hackathons
-              hackathons={hackathons.filter(h => h.isPublished !== false)}
-              squadWins={squadWins}
-              projects={projects}
-              builders={builders}
-              hackathonSquads={hackathonSquads}
-              onApplySquad={handleApplySuccess}
-              onInviteBuilder={handleInviteBuilder}
-              onCreateSquad={handleAddProject}
-              onAddHackathon={handleAddHackathon}
-              showToast={showToast}
-              currentUser={currentUser}
-            />
-          )}
-
-          {activeView === 'find-builders' && (
-            <FindBuilders
-              builders={builders}
-              projects={projects}
-              hackathonSquads={hackathonSquads}
-              sentInvitations={sentInvitations}
-              onInvite={handleInviteBuilder}
-              onViewProfile={handleViewProfile}
-              onAddBuilder={handleAddBuilder}
-              showToast={showToast}
-              currentUser={currentUser}
-            />
-          )}
-
-          {activeView === 'my-projects' && (
-            <MyProjects
-              projects={projects}
-              currentUser={currentUser}
-              onSelectProject={handleSelectProject}
-              onOpenPostProject={() => setIsPostProjectOpen(true)}
-            />
-          )}
-
-          {activeView === 'my-applications' && (
-            <MyApplications
-              applications={applications}
-              currentUser={currentUser}
-              onSelectProjectById={handleSelectProjectById}
-              initialTab={applicationsTab}
-              onTabChange={setApplicationsTab}
-              onUpdateStatus={handleUpdateApplicationStatus}
-            />
-          )}
-
-          {activeView === 'invitations' && (
-            <Invitations
-              receivedInvitations={receivedInvitations}
-              sentInvitations={sentInvitations}
-              onAcceptInvitation={handleAcceptInvitation}
-              onRejectInvitation={handleRejectInvitation}
-              onCancelInvitation={handleCancelInvitation}
-              onViewProfile={handleViewProfile}
-              onSelectProject={handleSelectProject}
-              currentUser={currentUser}
-            />
-          )}
-
-          {activeView === 'my-teams' && (() => {
-            const currentUserId = String(currentUser?._id || currentUser?.id || '');
-            const myProjectTeams = projects.filter(p => {
-              if (!currentUser) return false;
-              const ownerId = String(p.createdBy?._id || p.createdBy || '');
-              const isOwner = ownerId && ownerId === currentUserId;
-              const isMember = Array.isArray(p.members) && p.members.some(m => String(m._id || m || '') === currentUserId);
-              return isOwner || isMember;
-            });
-
-            const myHackTeams = hackathonSquads.filter(h => {
-              if (!currentUser) return false;
-              const ownerId = String(h.createdBy?._id || h.createdBy || '');
-              const isOwner = ownerId && ownerId === currentUserId;
-              const isMember = Array.isArray(h.members) && h.members.some(m => String(m._id || m || '') === currentUserId);
-              return isOwner || isMember;
-            });
-
-            const hasAnyTeams = myProjectTeams.length > 0 || myHackTeams.length > 0;
-
-            return (
-              <div className="flex flex-col w-full pb-space-xl space-y-space-lg">
-                <div className="flex flex-col max-w-3xl">
-                  <div className="flex items-center gap-space-xs text-secondary font-label-md text-label-md uppercase tracking-wider mb-1">
-                    <span className="material-symbols-outlined text-base">diversity_3</span>
-                    <span>Your Teams</span>
-                  </div>
-                  <h1 className="font-headline-lg text-headline-lg font-bold text-on-surface tracking-tight">
-                    My Teams
-                  </h1>
-                  <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-                    Teams and projects you are currently collaborating in.
-                  </p>
-                </div>
-
-                {/* Squad Rosters: Projects & Hackathons */}
-                {!hasAnyTeams ? (
-                  <div className="bg-surface-container-lowest rounded-2xl p-space-xl text-center text-on-surface-variant border border-surface-container-high/40">
-                    <span className="material-symbols-outlined text-4xl text-outline mb-2">diversity_3</span>
-                    <p className="font-body-lg text-body-lg text-on-surface font-semibold">You haven't joined any teams yet</p>
-                    <p className="font-body-sm text-body-sm mt-1">Explore Discover Projects or accept team invitations to join a team.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md">
-                    {/* Project Teams */}
-                    {myProjectTeams.map((p, idx) => {
-                      const isOwner = currentUser && ((p.createdBy?._id || p.createdBy) === currentUser._id);
-                      return (
-                        <div key={p._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2.5 py-1 rounded-full bg-surface-container text-secondary font-label-sm text-label-sm font-semibold">
-                                {p.categoryBadge || p.category || 'Project'}
-                              </span>
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                isOwner ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface-variant'
-                              }`}>
-                                {isOwner ? 'Creator' : 'Member'}
-                              </span>
-                            </div>
-                            <span className="font-label-sm text-label-sm text-secondary font-semibold">
-                              {Math.min(Array.isArray(p.members) && p.members.length > 0 ? p.members.length : (p.filledCount || 1), p.totalCapacity || 4)}/{p.totalCapacity || 4} Members
-                            </span>
-                          </div>
-                          <div>
-                            <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-                              {p.title}
-                            </h3>
-                            <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
-                              {p.tagline || p.whatAreYouBuilding || p.problemBeingSolved || p.fullDescription}
-                            </p>
-                          </div>
-                          <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
-                            <span className="text-on-surface font-medium">Created By</span>
-                            <span className="text-secondary font-semibold">{p.lead?.name || p.createdBy?.name || 'Project Creator'}</span>
-                          </div>
-                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-high/60">
-                            <button
-                              type="button"
-                              onClick={() => handleSelectProject(p)}
-                              className="py-2 px-4 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm hover:bg-surface-tint transition-all cursor-pointer shadow-xs"
-                            >
-                              View Project &amp; Team
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                    {/* Hackathon Teams */}
-                    {myHackTeams.map((h, idx) => {
-                      const isOwner = currentUser && ((h.createdBy?._id || h.createdBy) === currentUser._id);
-                      return (
-                        <div key={h._id || idx} className="bg-surface-container-lowest rounded-2xl p-space-lg shadow-sm space-y-4 border border-surface-container-high/40">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-900 font-label-sm text-label-sm font-semibold">
-                                {h.hackathonTitle || 'Hackathon Team'}
-                              </span>
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                isOwner ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface-variant'
-                              }`}>
-                                {isOwner ? 'Creator' : 'Member'}
-                              </span>
-                            </div>
-                            <span className="font-label-sm text-label-sm text-secondary font-semibold">
-                              {Math.min(Array.isArray(h.members) && h.members.length > 0 ? h.members.length : (h.filledCount || 1), h.totalCapacity || 4)}/{h.totalCapacity || 4} Members
-                            </span>
-                          </div>
-                          <div>
-                            <h3 className="font-headline-sm text-headline-sm font-bold text-on-surface">
-                              {h.teamName || h.title}
-                            </h3>
-                            <p className="font-body-sm text-body-sm text-on-surface-variant mt-1 line-clamp-2">
-                              {h.tagline || h.description || `Competing in ${h.hackathonTitle || 'Hackathon'}`}
-                            </p>
-                          </div>
-                          <div className="p-3 rounded-xl bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm">
-                            <span className="text-on-surface font-medium">Team Lead</span>
-                            <span className="text-secondary font-semibold">{h.lead?.name || h.createdBy?.name || 'Team Lead'}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {(activeView === 'profile' || activeView === 'settings') && (
-            <Profile
-              currentUser={currentUser}
-              targetUserId={viewingProfileUserId}
-              sentInvitations={sentInvitations}
-              onBack={() => {
-                setViewingProfileUserId(null);
-                setActiveView('find-builders');
-              }}
-              onInviteBuilder={handleInviteBuilder}
-              onUpdateUser={handleUpdateUser}
-              showToast={showToast}
-            />
-          )}
+            {/* Fallback */}
+            <Route path="*" element={<Navigate to={currentUser?.role === 'admin' ? '/admin/hackathons' : '/dashboard'} replace />} />
+          </Routes>
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar (Screens < 1024px) */}
+      <nav 
+        aria-label="Mobile Navigation"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface-container-lowest/95 backdrop-blur-md border-t border-surface-container-high/60 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] px-2 py-1.5 flex items-center justify-around select-none"
+      >
+        {currentUser?.role === 'admin' ? (
+          <>
+            <button
+              type="button"
+              onClick={() => handleNavigateView('admin-hackathons')}
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-colors cursor-pointer ${
+                pathname.startsWith('/admin/hackathons') ? 'text-secondary font-bold' : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-2xl leading-none">tune</span>
+              <span className="text-[10px] mt-0.5">Hackathons</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/admin/hackathons/new')}
+              className="flex flex-col items-center justify-center p-2 rounded-2xl bg-primary text-on-primary shadow-md active:scale-95 transition-all cursor-pointer -mt-4 border-2 border-surface"
+              title="Add Hackathon"
+            >
+              <span className="material-symbols-outlined text-2xl leading-none">add</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavigateView('admin-teams')}
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-colors cursor-pointer ${
+                pathname.startsWith('/admin/teams') ? 'text-secondary font-bold' : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-2xl leading-none">diversity_3</span>
+              <span className="text-[10px] mt-0.5">Teams</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => handleNavigateView('projects')}
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                pathname === '/dashboard' || pathname.startsWith('/projects') ? 'text-secondary font-bold' : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-2xl leading-none">explore</span>
+              <span className="text-[10px] mt-0.5">Projects</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavigateView('hackathons')}
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                pathname.startsWith('/hackathons') ? 'text-secondary font-bold' : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-2xl leading-none">terminal</span>
+              <span className="text-[10px] mt-0.5">Hackathons</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate('/create-project')}
+              className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-primary text-on-primary shadow-md active:scale-95 transition-all cursor-pointer -mt-4 border-2 border-surface"
+              title="Post Project"
+            >
+              <span className="material-symbols-outlined text-2xl leading-none">add</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavigateView('find-teammates')}
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                pathname.startsWith('/find-teammates') ? 'text-secondary font-bold' : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-2xl leading-none">group_add</span>
+              <span className="text-[10px] mt-0.5">Builders</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleNavigateView('profile')}
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
+                pathname.startsWith('/profile') ? 'text-secondary font-bold' : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <span className="material-symbols-outlined text-2xl leading-none">account_circle</span>
+              <span className="text-[10px] mt-0.5">Profile</span>
+            </button>
+          </>
+        )}
+      </nav>
 
       {/* Quick Apply Modal */}
       <QuickApplyModal
@@ -1086,12 +1503,14 @@ export default function App() {
         onApplySuccess={handleApplySuccess}
       />
 
-      {/* Post Project Modal */}
+      {/* Post Project Modal (available via /create-project route or button click) */}
       <PostProjectModal
-        isOpen={isPostProjectOpen}
+        isOpen={isPostProjectOpen || pathname === '/create-project'}
         onClose={() => {
           setIsPostProjectOpen(false);
-          setActiveView('discover-projects');
+          if (pathname === '/create-project') {
+            navigate('/projects');
+          }
         }}
         onAddProject={handleAddProject}
         currentUser={currentUser}
@@ -1103,10 +1522,13 @@ export default function App() {
         onClose={() => setIsCommandPaletteOpen(false)}
         projects={projects}
         hackathons={hackathons}
-        onSelectProject={handleSelectProject}
+        onSelectProject={(proj) => {
+          handleSelectProject(proj);
+          setIsCommandPaletteOpen(false);
+        }}
         onNavigate={(viewId) => {
-          setActiveView(viewId);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
+          handleNavigateView(viewId);
+          setIsCommandPaletteOpen(false);
         }}
       />
 
@@ -1131,12 +1553,12 @@ export default function App() {
           onClick={() => {
             if (popupNotification.type === 'application_rejected' || popupNotification.type === 'application_accepted') {
               setApplicationsTab('sent');
-              handleNavigateView('my-applications');
+              navigate('/applications');
             } else if (popupNotification.type === 'application_received') {
               setApplicationsTab('received');
-              handleNavigateView('my-applications');
+              navigate('/applications');
             } else if (popupNotification.type === 'invitation_received') {
-              handleNavigateView('invitations');
+              navigate('/invitations');
             }
             setPopupNotification(null);
           }}

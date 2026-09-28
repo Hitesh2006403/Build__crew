@@ -16,22 +16,50 @@ export default function AdminDashboard({
   onResetDefaults,
   showToast,
   onNavigate,
+  onNavigateRoute,
   initialTab = 'hackathons',
+  initialView = 'list',
+  initialEditingId = null,
 }) {
   // Navigation: 'list' | 'form'
-  const [view, setView] = useState('list');
+  const [view, setView] = useState(initialView || 'list');
   const [adminActiveTab, setAdminActiveTab] = useState(initialTab || 'hackathons'); // 'hackathons' | 'teams' | 'projects'
   const [clearingProjectId, setClearingProjectId] = useState(null);
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+  const [isEditing, setIsEditing] = useState(Boolean(initialEditingId));
+  const [editingId, setEditingId] = useState(initialEditingId || null);
 
-  // Sync tab with initialTab prop if provided (e.g. from Sidebar)
+  // Sync tab with initialTab prop if provided (e.g. from Sidebar or Router)
   useEffect(() => {
     if (initialTab) {
       setAdminActiveTab(initialTab);
     }
   }, [initialTab]);
+
+  useEffect(() => {
+    if (initialView) {
+      setView(initialView);
+    }
+    if (initialEditingId) {
+      setIsEditing(true);
+      setEditingId(initialEditingId);
+    }
+  }, [initialView, initialEditingId]);
+
+  const handleSelectTab = (tab) => {
+    setAdminActiveTab(tab);
+    if (onNavigateRoute) {
+      onNavigateRoute(tab === 'teams' ? '/admin/teams' : '/admin/hackathons');
+    }
+  };
+
+  const handleBackToList = () => {
+    setView('list');
+    if (onNavigateRoute) {
+      onNavigateRoute(adminActiveTab === 'teams' ? '/admin/teams' : '/admin/hackathons');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Project & Associated Team Deletion & View States
   const [projectToDelete, setProjectToDelete] = useState(null);
@@ -235,18 +263,21 @@ export default function AdminDashboard({
   };
 
   // Open Form to Add New Hackathon
-  const handleOpenAdd = () => {
+  const handleOpenAdd = (shouldNavigate = true) => {
     setFormData(emptyForm);
     setTrackInput('');
     setFormErrors({});
     setIsEditing(false);
     setEditingId(null);
     setView('form');
+    if (shouldNavigate && onNavigateRoute) {
+      onNavigateRoute('/admin/hackathons/new');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Open Form to Edit Existing Hackathon
-  const handleOpenEdit = (hack) => {
+  const handleOpenEdit = (hack, shouldNavigate = true) => {
     setIsEditing(true);
     setEditingId(hack._id || hack.id);
     setFormErrors({});
@@ -325,8 +356,21 @@ export default function AdminDashboard({
 
     setTrackInput('');
     setView('form');
+    if (shouldNavigate && onNavigateRoute) {
+      onNavigateRoute(`/admin/hackathons/${hack._id || hack.id}/edit`);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Sync initialEditingId when hackathons load
+  useEffect(() => {
+    if (initialEditingId && Array.isArray(hackathons) && hackathons.length > 0) {
+      const found = hackathons.find(h => String(h._id || h.id) === String(initialEditingId));
+      if (found) {
+        handleOpenEdit(found, false);
+      }
+    }
+  }, [initialEditingId, hackathons]);
 
   // Duplicate / Clone Existing Hackathon
   const handleDuplicate = async (hack) => {
@@ -563,8 +607,7 @@ export default function AdminDashboard({
       }
     }
 
-    setView('list');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    handleBackToList();
   };
 
   // Confirm Delete in MongoDB
@@ -762,7 +805,7 @@ export default function AdminDashboard({
         <div className="flex items-center gap-2 border-b border-surface-container-high/60 pb-1">
           <button
             type="button"
-            onClick={() => setAdminActiveTab('hackathons')}
+            onClick={() => handleSelectTab('hackathons')}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-title-sm text-title-sm transition-all cursor-pointer ${
               adminActiveTab === 'hackathons'
                 ? 'bg-surface-container-high text-on-surface font-bold shadow-xs'
@@ -778,7 +821,7 @@ export default function AdminDashboard({
 
           <button
             type="button"
-            onClick={() => setAdminActiveTab('teams')}
+            onClick={() => handleSelectTab('teams')}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-title-sm text-title-sm transition-all cursor-pointer ${
               adminActiveTab === 'teams' || adminActiveTab === 'projects'
                 ? 'bg-surface-container-high text-on-surface font-bold shadow-xs'
@@ -1722,7 +1765,7 @@ export default function AdminDashboard({
         <div>
           <button
             type="button"
-            onClick={() => setView('list')}
+            onClick={handleBackToList}
             className="inline-flex items-center gap-1.5 text-xs font-bold text-secondary hover:underline cursor-pointer mb-2"
           >
             <span className="material-symbols-outlined text-base">arrow_back</span>
@@ -2432,7 +2475,7 @@ export default function AdminDashboard({
             <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={() => setView('list')}
+                onClick={handleBackToList}
                 className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-bold text-xs transition-all cursor-pointer text-center"
               >
                 Cancel
