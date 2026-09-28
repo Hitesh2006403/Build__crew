@@ -4,7 +4,9 @@ export default function Sidebar({
   onOpenPostProject, 
   currentUser, 
   onLogout,
-  pendingInvitationsCount = 0
+  pendingInvitationsCount = 0,
+  adminTab = 'hackathons',
+  onSelectAdminTab
 }) {
   const isAdmin = currentUser?.role === 'admin';
 
@@ -72,22 +74,41 @@ export default function Sidebar({
         <nav className="px-space-sm mt-space-xs space-y-1">
           {/* Admin Management Section (The only section visible in the Admin Panel) */}
           {isAdmin && (
-            <div className="mb-2">
+            <div className="mb-2 space-y-1">
               <div className="px-space-md pt-space-xs pb-1 font-label-sm text-label-sm uppercase tracking-wider text-secondary font-bold flex items-center gap-1">
                 <span className="material-symbols-outlined text-sm">admin_panel_settings</span>
                 <span>ADMIN</span>
               </div>
               <button
                 type="button"
-                onClick={() => handleNavClick('admin-dashboard')}
+                onClick={() => {
+                  if (onSelectAdminTab) onSelectAdminTab('hackathons');
+                  handleNavClick('admin-dashboard');
+                }}
                 className={`w-full flex items-center gap-space-sm px-space-md py-2.5 rounded-xl transition-all font-title-sm text-title-sm text-left ${
-                  activeView === 'admin-dashboard'
+                  activeView === 'admin-dashboard' && adminTab === 'hackathons'
                     ? 'bg-secondary text-on-secondary font-semibold shadow-xs'
                     : 'text-secondary hover:bg-secondary-fixed/40 hover:text-on-surface font-semibold'
                 }`}
               >
                 <span className="material-symbols-outlined text-xl">tune</span>
                 <span>Manage Hackathons</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (onSelectAdminTab) onSelectAdminTab('teams');
+                  handleNavClick('admin-dashboard');
+                }}
+                className={`w-full flex items-center gap-space-sm px-space-md py-2.5 rounded-xl transition-all font-title-sm text-title-sm text-left ${
+                  activeView === 'admin-dashboard' && (adminTab === 'teams' || adminTab === 'projects')
+                    ? 'bg-secondary text-on-secondary font-semibold shadow-xs'
+                    : 'text-secondary hover:bg-secondary-fixed/40 hover:text-on-surface font-semibold'
+                }`}
+              >
+                <span className="material-symbols-outlined text-xl">diversity_3</span>
+                <span>Manage Teams</span>
               </button>
             </div>
           )}

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import HackathonDetailsModal from '../components/hackathons/HackathonDetailsModal';
 import hackathonsApi from '../api/hackathons';
 import projectsApi from '../api/projects';
@@ -11,17 +11,53 @@ export default function AdminDashboard({
   onRefreshHackathons,
   onRefreshProjects,
   onUpdateProject,
+  onDeleteProject,
+  onSelectProject,
   onResetDefaults,
   showToast,
-  onNavigate
+  onNavigate,
+  initialTab = 'hackathons',
 }) {
   // Navigation: 'list' | 'form'
   const [view, setView] = useState('list');
-  const [adminActiveTab, setAdminActiveTab] = useState('hackathons'); // 'hackathons' | 'projects'
+  const [adminActiveTab, setAdminActiveTab] = useState(initialTab || 'hackathons'); // 'hackathons' | 'teams' | 'projects'
   const [clearingProjectId, setClearingProjectId] = useState(null);
   const [projectSearchQuery, setProjectSearchQuery] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+
+  // Sync tab with initialTab prop if provided (e.g. from Sidebar)
+  useEffect(() => {
+    if (initialTab) {
+      setAdminActiveTab(initialTab);
+    }
+  }, [initialTab]);
+
+  // Project & Associated Team Deletion & View States
+  const [projectToDelete, setProjectToDelete] = useState(null);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [previewProjectTeam, setPreviewProjectTeam] = useState(null);
+
+  const handleConfirmDeleteProject = async () => {
+    if (!projectToDelete) return;
+    try {
+      setIsDeletingProject(true);
+      const targetId = projectToDelete._id || projectToDelete.id;
+      if (onDeleteProject) {
+        await onDeleteProject(targetId);
+      } else {
+        await projectsApi.deleteProject(targetId);
+        if (onRefreshProjects) onRefreshProjects();
+        showToast?.(`Project "${projectToDelete.title}" and associated team data deleted permanently.`);
+      }
+      setProjectToDelete(null);
+    } catch (err) {
+      console.error('Delete project failed:', err);
+      showToast?.(`Deletion failed: ${err.message || 'Error occurred during deletion'}`);
+    } finally {
+      setIsDeletingProject(false);
+    }
+  };
 
   const handleClearTeamFull = async (projectId) => {
     try {
@@ -46,7 +82,10 @@ export default function AdminDashboard({
     return projects.filter(p => 
       (p.title || '').toLowerCase().includes(q) ||
       (p.category || p.categoryBadge || '').toLowerCase().includes(q) ||
-      (p.createdBy?.name || p.lead?.name || '').toLowerCase().includes(q)
+      (p.createdBy?.name || p.lead?.name || '').toLowerCase().includes(q) ||
+      (p.createdBy?.email || '').toLowerCase().includes(q) ||
+      (p.lead?.university || p.createdBy?.college || '').toLowerCase().includes(q) ||
+      (p.tagline || p.whatAreYouBuilding || '').toLowerCase().includes(q)
     );
   }, [projects, projectSearchQuery]);
 
@@ -658,7 +697,11 @@ export default function AdminDashboard({
           <div>
             <div className="flex flex-wrap items-center gap-2 text-secondary font-label-md text-label-md uppercase tracking-wider mb-0.5">
               <span className="material-symbols-outlined text-base">admin_panel_settings</span>
-              <span>ADMIN CONSOLE · HACKATHON CIRCUIT MANAGEMENT</span>
+              <span>
+                {adminActiveTab === 'teams' || adminActiveTab === 'projects'
+                  ? 'ADMIN CONSOLE · SQUAD & TEAM MANAGEMENT'
+                  : 'ADMIN CONSOLE · HACKATHON CIRCUIT MANAGEMENT'}
+              </span>
               {currentUser && (
                 <span className="text-[11px] text-on-surface-variant font-medium normal-case ml-2 pl-2 border-l border-surface-container-high hidden sm:inline">
                   Operator: <strong className="text-on-surface">{currentUser.name}</strong>
@@ -666,36 +709,56 @@ export default function AdminDashboard({
               )}
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-on-surface tracking-tight uppercase">
-              MANAGE HACKATHONS
+              {adminActiveTab === 'teams' || adminActiveTab === 'projects'
+                ? 'MANAGE TEAMS'
+                : 'MANAGE HACKATHONS'}
             </h1>
             <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5">
-              Create, modify, verify, duplicate, and schedule collegiate competitions across the platform.
+              {adminActiveTab === 'teams' || adminActiveTab === 'projects'
+                ? 'Review real projects, inspect associated student squads, manage team allocations, and permanently remove projects.'
+                : 'Create, modify, verify, duplicate, and schedule collegiate competitions across the platform.'}
             </p>
           </div>
 
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setIsResetConfirmOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold border border-surface-container-high transition-all cursor-pointer"
-              title="Restore standard circuit seed data"
-            >
-              <span className="material-symbols-outlined text-sm text-outline">history</span>
-              <span>Reset to Defaults</span>
-            </button>
+            {adminActiveTab === 'hackathons' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsResetConfirmOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold border border-surface-container-high transition-all cursor-pointer"
+                  title="Restore standard circuit seed data"
+                >
+                  <span className="material-symbols-outlined text-sm text-outline">history</span>
+                  <span>Reset to Defaults</span>
+                </button>
 
-            <button
-              type="button"
-              onClick={handleOpenAdd}
-              className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary hover:bg-surface-tint active:scale-[0.98] text-on-primary text-xs font-bold shadow-md transition-all cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-base">add_circle</span>
-              <span>+ Add Hackathon</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={handleOpenAdd}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary hover:bg-surface-tint active:scale-[0.98] text-on-primary text-xs font-bold shadow-md transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base">add_circle</span>
+                  <span>+ Add Hackathon</span>
+                </button>
+              </>
+            ) : (
+              onRefreshProjects && (
+                <button
+                  type="button"
+                  onClick={onRefreshProjects}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-semibold border border-surface-container-high transition-all cursor-pointer"
+                  title="Refresh real teams and projects from MongoDB"
+                >
+                  <span className="material-symbols-outlined text-sm text-secondary">refresh</span>
+                  <span>Refresh Real Data</span>
+                </button>
+              )
+            )}
           </div>
         </div>
 
-        {/* Navigation Tabs: Hackathons vs Projects */}
+        {/* Navigation Tabs: Hackathons vs Teams */}
         <div className="flex items-center gap-2 border-b border-surface-container-high/60 pb-1">
           <button
             type="button"
@@ -715,22 +778,22 @@ export default function AdminDashboard({
 
           <button
             type="button"
-            onClick={() => setAdminActiveTab('projects')}
+            onClick={() => setAdminActiveTab('teams')}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-title-sm text-title-sm transition-all cursor-pointer ${
-              adminActiveTab === 'projects'
+              adminActiveTab === 'teams' || adminActiveTab === 'projects'
                 ? 'bg-surface-container-high text-on-surface font-bold shadow-xs'
                 : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
             }`}
           >
-            <span className="material-symbols-outlined text-lg">rocket_launch</span>
-            <span>Project Squads & Team Full Status</span>
+            <span className="material-symbols-outlined text-lg">diversity_3</span>
+            <span>Manage Teams</span>
             <span className="ml-1 px-2 py-0.5 rounded-full bg-surface-container-highest text-on-surface-variant text-xs font-semibold">
               {projects.length}
             </span>
           </button>
         </div>
 
-        {adminActiveTab === 'projects' ? (
+        {adminActiveTab === 'teams' || adminActiveTab === 'projects' ? (
           <div className="space-y-4">
             {/* Search and stats bar */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-surface-container-lowest p-4 rounded-2xl border border-surface-container-high/50 shadow-xs">
@@ -776,12 +839,11 @@ export default function AdminDashboard({
                   <table className="w-full text-left text-xs">
                     <thead className="bg-surface-container-low text-outline font-semibold uppercase tracking-wider text-[11px] border-b border-surface-container-high">
                       <tr>
-                        <th className="py-3 px-4">Project</th>
-                        <th className="py-3 px-4">Creator</th>
-                        <th className="py-3 px-4">Category</th>
-                        <th className="py-3 px-4">Members / Capacity</th>
+                        <th className="py-3 px-4">Project &amp; Category</th>
+                        <th className="py-3 px-4">Creator / Owner</th>
+                        <th className="py-3 px-4">Associated Team Roster</th>
                         <th className="py-3 px-4">Team Status</th>
-                        <th className="py-3 px-4 text-right">Team Full Option</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-surface-container-high/40">
@@ -792,28 +854,47 @@ export default function AdminDashboard({
                         const maxCap = Number(p.totalCapacity) || 4;
                         const isFull = membersCount >= maxCap || p.status === 'full' || p.recruitingBadge === 'Squad Full';
                         const creatorName = p.createdBy?.name || p.lead?.name || 'Student Builder';
+                        const creatorEmail = p.createdBy?.email || '';
                         const creatorCollege = p.createdBy?.college || p.createdBy?.university || p.lead?.university || '';
 
                         return (
                           <tr key={p._id || p.id} className="hover:bg-surface-container-low/50 transition-colors">
-                            <td className="py-3 px-4">
+                            <td className="py-3 px-4 max-w-xs">
                               <span className="font-bold text-on-surface block text-sm">{p.title}</span>
                               {(p.tagline || p.whatAreYouBuilding) && (
                                 <span className="text-[11px] text-on-surface-variant line-clamp-1">{p.tagline || p.whatAreYouBuilding}</span>
                               )}
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="font-semibold text-on-surface block">{creatorName}</span>
-                              {creatorCollege && <span className="text-[11px] text-on-surface-variant block">{creatorCollege}</span>}
-                            </td>
-                            <td className="py-3 px-4">
-                              <span className="px-2 py-0.5 rounded-md bg-surface-container text-secondary font-semibold text-[11px]">
+                              <span className="inline-block mt-1 px-2 py-0.2 rounded-md bg-surface-container text-secondary font-semibold text-[10px]">
                                 {p.category || p.categoryBadge || 'General'}
                               </span>
                             </td>
                             <td className="py-3 px-4">
-                              <span className="font-bold text-on-surface">{membersCount} / {maxCap}</span>
-                              <span className="text-on-surface-variant text-[11px] ml-1">Members</span>
+                              <span className="font-semibold text-on-surface block">{creatorName}</span>
+                              {creatorEmail && <span className="text-[11px] text-on-surface-variant block">{creatorEmail}</span>}
+                              {creatorCollege && <span className="text-[10px] text-on-surface-variant/80 block">{creatorCollege}</span>}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-on-surface text-xs">{membersCount} / {maxCap}</span>
+                                <span className="text-on-surface-variant text-[11px]">Members</span>
+                              </div>
+                              {/* Team Member Avatars / Tooltips */}
+                              {Array.isArray(p.members) && p.members.length > 0 && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  {p.members.slice(0, 4).map((m, i) => (
+                                    <div
+                                      key={m._id || i}
+                                      className="w-5 h-5 rounded-full bg-secondary/15 text-secondary text-[10px] font-bold flex items-center justify-center border border-secondary/30 shrink-0"
+                                      title={typeof m === 'object' ? `${m.name} (${m.email || ''})` : 'Team Member'}
+                                    >
+                                      {typeof m === 'object' && m.name ? m.name[0].toUpperCase() : 'M'}
+                                    </div>
+                                  ))}
+                                  {p.members.length > 4 && (
+                                    <span className="text-[10px] text-on-surface-variant">+{p.members.length - 4}</span>
+                                  )}
+                                </div>
+                              )}
                             </td>
                             <td className="py-3 px-4">
                               {isFull ? (
@@ -829,28 +910,42 @@ export default function AdminDashboard({
                               )}
                             </td>
                             <td className="py-3 px-4 text-right">
-                              {isFull ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* VIEW ACTION */}
                                 <button
                                   type="button"
-                                  disabled={clearingProjectId === (p._id || p.id)}
-                                  onClick={() => handleClearTeamFull(p._id || p.id)}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary hover:bg-surface-tint text-on-primary font-bold text-xs shadow-xs transition-all cursor-pointer active:scale-[0.98] disabled:opacity-50"
+                                  onClick={() => setPreviewProjectTeam(p)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-semibold text-xs border border-surface-container-high transition-all cursor-pointer shadow-xs"
+                                  title="View project and associated team details"
                                 >
-                                  <span className="material-symbols-outlined text-sm">lock_open</span>
-                                  <span>{clearingProjectId === (p._id || p.id) ? 'Clearing...' : 'Clear Team Full Status'}</span>
+                                  <span className="material-symbols-outlined text-sm text-secondary">visibility</span>
+                                  <span>View</span>
                                 </button>
-                              ) : (
+
+                                {/* DELETE ACTION */}
                                 <button
                                   type="button"
-                                  disabled={clearingProjectId === (p._id || p.id)}
-                                  onClick={() => handleClearTeamFull(p._id || p.id)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-medium transition-all cursor-pointer disabled:opacity-50"
-                                  title="Expand capacity for this squad"
+                                  onClick={() => setProjectToDelete(p)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-semibold text-xs border border-rose-500/20 transition-all cursor-pointer shadow-xs"
+                                  title="Delete project and associated team data from MongoDB"
                                 >
-                                  <span className="material-symbols-outlined text-xs">add</span>
-                                  <span>+ Add Capacity</span>
+                                  <span className="material-symbols-outlined text-sm">delete</span>
+                                  <span>Delete</span>
                                 </button>
-                              )}
+
+                                {/* Team Full Clear Status Action */}
+                                {isFull && (
+                                  <button
+                                    type="button"
+                                    disabled={clearingProjectId === (p._id || p.id)}
+                                    onClick={() => handleClearTeamFull(p._id || p.id)}
+                                    className="p-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface-variant hover:text-on-surface text-xs transition-all cursor-pointer disabled:opacity-50"
+                                    title="Unlock team full status"
+                                  >
+                                    <span className="material-symbols-outlined text-sm">lock_open</span>
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1373,6 +1468,242 @@ export default function AdminDashboard({
               onNavigate?.('hackathons');
             }}
           />
+        )}
+
+        {/* Confirmation Dialog: Permanent Project & Team Deletion */}
+        {projectToDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-modal">
+            <div className="w-full max-w-md bg-surface-container-lowest rounded-3xl p-6 shadow-2xl border border-surface-container-high space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="w-10 h-10 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-2xl">warning</span>
+                </span>
+                <div>
+                  <h4 className="font-bold text-on-surface text-base">
+                    Delete this project and all associated team data?
+                  </h4>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    Target Project: <strong className="text-on-surface">{projectToDelete.title}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-surface-container-low text-xs text-on-surface-variant space-y-1.5">
+                <p className="font-semibold text-on-surface">This permanent backend deletion will remove:</p>
+                <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+                  <li>The project record from MongoDB</li>
+                  <li>Associated team and roster allocations</li>
+                  <li>All submitted applications for this project</li>
+                  <li>All invitations dispatched for this team/project</li>
+                  <li>All related notifications for applications &amp; invitations</li>
+                </ul>
+              </div>
+
+              <p className="text-xs text-red-600 font-medium">
+                This action is permanent and cannot be undone. No orphan records will remain in MongoDB.
+              </p>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeletingProject}
+                  onClick={() => setProjectToDelete(null)}
+                  className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-bold text-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isDeletingProject}
+                  onClick={handleConfirmDeleteProject}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-bold text-xs shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-base">delete_forever</span>
+                  <span>{isDeletingProject ? 'Deleting...' : 'Delete Permanently'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Project & Associated Team Details Modal */}
+        {previewProjectTeam && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-modal">
+            <div className="w-full max-w-2xl bg-surface-container-lowest rounded-3xl p-6 shadow-2xl border border-surface-container-high space-y-5 max-h-[85vh] overflow-y-auto">
+              {/* Header */}
+              <div className="flex items-start justify-between pb-3 border-b border-surface-container-high/60">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-surface-container text-secondary font-semibold text-xs">
+                      {previewProjectTeam.category || previewProjectTeam.categoryBadge || 'Project'}
+                    </span>
+                    <span className={`px-2.5 py-0.5 rounded-full font-semibold text-xs ${
+                      (previewProjectTeam.members?.length || previewProjectTeam.filledCount || 1) >= (previewProjectTeam.totalCapacity || 4)
+                        ? 'bg-rose-500/10 text-rose-600'
+                        : 'bg-emerald-500/10 text-emerald-600'
+                    }`}>
+                      {(previewProjectTeam.members?.length || previewProjectTeam.filledCount || 1) >= (previewProjectTeam.totalCapacity || 4)
+                        ? 'Squad Full'
+                        : 'Recruiting Active'}
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-bold text-on-surface">
+                    {previewProjectTeam.title}
+                  </h3>
+                  {previewProjectTeam.tagline && (
+                    <p className="text-xs text-on-surface-variant">
+                      {previewProjectTeam.tagline}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPreviewProjectTeam(null)}
+                  className="w-8 h-8 rounded-full bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-lg">close</span>
+                </button>
+              </div>
+
+              {/* Description */}
+              {(previewProjectTeam.problemBeingSolved || previewProjectTeam.whatAreYouBuilding || previewProjectTeam.fullDescription) && (
+                <div className="p-3.5 rounded-2xl bg-surface-container-low text-xs space-y-1">
+                  <span className="font-bold text-on-surface block">About the Project</span>
+                  <p className="text-on-surface-variant leading-relaxed whitespace-pre-line">
+                    {previewProjectTeam.problemBeingSolved || previewProjectTeam.whatAreYouBuilding || previewProjectTeam.fullDescription}
+                  </p>
+                </div>
+              )}
+
+              {/* Team Lead & Owner */}
+              <div className="p-3.5 rounded-2xl bg-surface-container-low space-y-2">
+                <span className="font-bold text-on-surface text-xs block">Project Creator &amp; Team Lead</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-secondary/10 text-secondary flex items-center justify-center font-bold text-sm overflow-hidden shrink-0 border border-secondary/20">
+                    {previewProjectTeam.lead?.avatar || previewProjectTeam.createdBy?.avatar ? (
+                      <img src={previewProjectTeam.lead?.avatar || previewProjectTeam.createdBy?.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                    ) : (
+                      (previewProjectTeam.lead?.name || previewProjectTeam.createdBy?.name || 'U')[0].toUpperCase()
+                    )}
+                  </div>
+                  <div className="text-xs">
+                    <span className="font-bold text-on-surface block">
+                      {previewProjectTeam.lead?.name || previewProjectTeam.createdBy?.name || 'Unknown'}
+                    </span>
+                    {previewProjectTeam.createdBy?.email && (
+                      <span className="text-on-surface-variant block">{previewProjectTeam.createdBy.email}</span>
+                    )}
+                    {(previewProjectTeam.lead?.university || previewProjectTeam.createdBy?.college) && (
+                      <span className="text-on-surface-variant/80 block text-[11px]">
+                        {previewProjectTeam.lead?.university || previewProjectTeam.createdBy?.college}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Associated Team Roster */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-on-surface text-xs">
+                    Associated Team Roster ({Array.isArray(previewProjectTeam.members) && previewProjectTeam.members.length > 0 ? previewProjectTeam.members.length : (previewProjectTeam.filledCount || 1)} / {previewProjectTeam.totalCapacity || 4} Members)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {Array.isArray(previewProjectTeam.members) && previewProjectTeam.members.length > 0 ? (
+                    previewProjectTeam.members.map((member, i) => {
+                      const mName = typeof member === 'object' ? (member.name || 'Member') : 'Teammate';
+                      const mEmail = typeof member === 'object' ? member.email : '';
+                      const mCollege = typeof member === 'object' ? (member.college || member.university) : '';
+                      const mAvatar = typeof member === 'object' ? (member.avatar || member.profileImage) : '';
+                      const isOwner = typeof member === 'object' && previewProjectTeam.createdBy && (
+                        (member._id && previewProjectTeam.createdBy._id && String(member._id) === String(previewProjectTeam.createdBy._id)) ||
+                        (member._id && String(member._id) === String(previewProjectTeam.createdBy))
+                      );
+
+                      return (
+                        <div key={member._id || i} className="p-2.5 rounded-xl bg-surface-container-low border border-surface-container-high/40 flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-secondary/10 text-secondary flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
+                            {mAvatar ? <img src={mAvatar} alt={mName} className="w-full h-full object-cover" /> : mName[0].toUpperCase()}
+                          </div>
+                          <div className="text-xs truncate">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-on-surface truncate">{mName}</span>
+                              {isOwner && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-secondary-fixed text-on-secondary-fixed font-semibold">
+                                  Lead
+                                </span>
+                              )}
+                            </div>
+                            {mEmail && <span className="text-[11px] text-on-surface-variant block truncate">{mEmail}</span>}
+                            {mCollege && <span className="text-[10px] text-on-surface-variant/80 block truncate">{mCollege}</span>}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-3 rounded-xl bg-surface-container-low text-xs text-on-surface-variant col-span-2">
+                      1 Member registered: {previewProjectTeam.lead?.name || previewProjectTeam.createdBy?.name || 'Squad Lead'}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Vacancies / Roles Needed */}
+              {Array.isArray(previewProjectTeam.rolesNeeded) && previewProjectTeam.rolesNeeded.length > 0 && (
+                <div className="space-y-1.5">
+                  <span className="font-bold text-on-surface text-xs block">Open Roles Needed</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {previewProjectTeam.rolesNeeded.map((role, idx) => (
+                      <span key={idx} className="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface text-xs font-medium">
+                        {role}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Footer Actions */}
+              <div className="flex items-center justify-between pt-3 border-t border-surface-container-high/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviewProjectTeam(null);
+                    setProjectToDelete(previewProjectTeam);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-600 hover:text-white font-bold text-xs border border-rose-500/20 transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                  <span>Delete Project &amp; Team</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  {onSelectProject && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectProject(previewProjectTeam);
+                        setPreviewProjectTeam(null);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-primary hover:bg-surface-tint text-on-primary font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      <span>Go to Project Page</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setPreviewProjectTeam(null)}
+                    className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-bold text-xs transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     );

@@ -206,17 +206,30 @@ export default function Header({
 
               <div className="space-y-1 text-xs">
                 {currentUser?.role === 'admin' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      if (onOpenAdminDashboard) onOpenAdminDashboard();
-                    }}
-                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-surface-container font-semibold text-secondary flex items-center gap-2 cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-base">admin_panel_settings</span>
-                    <span>Manage Hackathons</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        if (onOpenAdminDashboard) onOpenAdminDashboard('hackathons');
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-surface-container font-semibold text-secondary flex items-center gap-2 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-base">admin_panel_settings</span>
+                      <span>Manage Hackathons</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowUserMenu(false);
+                        if (onOpenAdminDashboard) onOpenAdminDashboard('teams');
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-surface-container font-semibold text-secondary flex items-center gap-2 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-base">diversity_3</span>
+                      <span>Manage Teams</span>
+                    </button>
+                  </>
                 )}
 
                 <button

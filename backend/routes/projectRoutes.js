@@ -1,6 +1,10 @@
 import express from "express";
 import mongoose from "mongoose";
 import Project from "../models/Project.js";
+import Team from "../models/Team.js";
+import Application from "../models/Application.js";
+import Invitation from "../models/Invitation.js";
+import Notification from "../models/Notification.js";
 import { authenticateUser, optionalAuth } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -240,7 +244,7 @@ router.put("/:id", authenticateUser, async (req, res) => {
   }
 });
 
-// DELETE /api/projects/:id - Delete project (Owner or Admin only)
+// DELETE /api/projects/:id - Delete project and all associated team data (Admin only)
 router.delete("/:id", authenticateUser, async (req, res) => {
   try {
     const { id } = req.params;
@@ -248,19 +252,85 @@ router.delete("/:id", authenticateUser, async (req, res) => {
       return res.status(400).json({ error: "Invalid project ID format." });
     }
 
+    // Authorization: Only users with role="admin" can delete projects and associated teams
+    if (!req.user || req.user.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden: Administrator privileges required to delete projects and teams." });
+    }
+
     const project = await Project.findById(id);
     if (!project) {
-      return res.status(404).json({ error: "Project not found." });
+      return res.status(404).json({ error: "Project not found in database." });
     }
 
-    if (project.createdBy.toString() !== req.user._id.toString() && req.user.role !== "admin") {
-      return res.status(403).json({ error: "Forbidden: Only the project owner or an admin can delete this project." });
-    }
+    const projectObjectId = new mongoose.Types.ObjectId(id);
+    const projectStringId = id.toString();
 
-    await Project.findByIdAndDelete(id);
-    return res.json({ success: true, message: "Project deleted from database." });
+    // 1. Find all associated teams
+    const associatedTeams = await Team.find({ project: projectObjectId });
+    const teamIds = associatedTeams.map((t) => t._id);
+    const teamStringIds = teamIds.map((tId) => tId.toString());
+
+    // 2. Find all applications for this project
+    const associatedApplications = await Application.find({ project: projectObjectId });
+    const appIds = associatedApplications.map((a) => a._id);
+    const appStringIds = appIds.map((aId) => aId.toString());
+
+    // 3. Find all invitations for this project or its teams
+    const associatedInvitations = await Invitation.find({
+      $or: [
+        { project: projectObjectId },
+        { team: { $in: teamIds } },
+      ],
+    });
+    const invIds = associatedInvitations.map((i) => i._id);
+    const invStringIds = invIds.map((iId) => iId.toString());
+
+    // 4. Collect all related IDs for notifications (project, applications, invitations, teams)
+    const allRelatedIds = [
+      projectStringId,
+      ...appStringIds,
+      ...invStringIds,
+      ...teamStringIds,
+    ];
+
+    // 5. Delete all related notifications from MongoDB
+    const notifResult = await Notification.deleteMany({
+      $or: [
+        { relatedId: { $in: allRelatedIds } },
+      ],
+    });
+
+    // 6. Delete all applications for this project
+    const appResult = await Application.deleteMany({ project: projectObjectId });
+
+    // 7. Delete all invitations related to this project or its teams
+    const invResult = await Invitation.deleteMany({
+      $or: [
+        { project: projectObjectId },
+        { team: { $in: teamIds } },
+      ],
+    });
+
+    // 8. Delete all associated teams
+    const teamResult = await Team.deleteMany({ project: projectObjectId });
+
+    // 9. Delete the project itself from MongoDB
+    await Project.findByIdAndDelete(projectObjectId);
+
+    return res.json({
+      success: true,
+      message: `Project "${project.title}" and all associated team data deleted permanently from MongoDB.`,
+      deleted: {
+        project: 1,
+        teams: teamResult.deletedCount,
+        applications: appResult.deletedCount,
+        invitations: invResult.deletedCount,
+        notifications: notifResult.deletedCount,
+      },
+    });
   } catch (err) {
-    return res.status(500).json({ error: "Failed to delete project.", details: err.message });
+    console.error("Cascade project deletion error:", err);
+    return res.status(500).json({ error: "Failed to delete project and associated data.", details: err.message });
   }
 });
 

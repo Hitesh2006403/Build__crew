@@ -50,6 +50,7 @@ export default function App() {
   const [isPostProjectOpen, setIsPostProjectOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [adminTab, setAdminTab] = useState('hackathons');
 
   // Opening Splash Screen State
   const [showSplash, setShowSplash] = useState(true);
@@ -369,6 +370,24 @@ export default function App() {
     }
   };
 
+  const handleDeleteProject = async (projectId) => {
+    try {
+      const res = await projectsApi.deleteProject(projectId);
+      setProjects(prev => prev.filter(p => (p._id || p.id) !== projectId));
+      setSelectedProject(prev => (prev && ((prev._id || prev.id) === projectId) ? null : prev));
+      await Promise.allSettled([
+        fetchProjects(),
+        fetchUserData()
+      ]);
+      showToast(res?.message || 'Project and associated team data deleted permanently from MongoDB.');
+      return res;
+    } catch (err) {
+      console.error('Delete project failed:', err);
+      showToast(err.message || 'Failed to delete project');
+      throw err;
+    }
+  };
+
   const handleInviteBuilder = async (inviteData) => {
     try {
       let payload;
@@ -560,6 +579,8 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         pendingInvitationsCount={receivedInvitations.filter(i => i.status === 'pending').length}
+        adminTab={adminTab}
+        onSelectAdminTab={setAdminTab}
       />
 
       {/* Main Content Area (Offset by Sidebar: pl-72) */}
@@ -583,12 +604,15 @@ export default function App() {
           onNavigateInvitations={() => handleNavigateView('invitations')}
           currentUser={currentUser}
           onLogout={handleLogout}
-          onOpenAdminDashboard={() => handleNavigateView('admin-dashboard')}
+          onOpenAdminDashboard={(tab = 'hackathons') => {
+            setAdminTab(tab);
+            handleNavigateView('admin-dashboard');
+          }}
         />
 
         {/* Dynamic View Router */}
         <main className="w-full pt-16 bg-surface min-h-screen px-space-lg py-space-lg flex-1">
-          {/* Admin Hackathon Management (Protected for role='admin', AccessDenied fallback for students) */}
+          {/* Admin Hackathon & Team Management (Protected for role='admin', AccessDenied fallback for students) */}
           {activeView === 'admin-dashboard' && (
             currentUser?.role === 'admin' ? (
               <AdminDashboard
@@ -599,8 +623,11 @@ export default function App() {
                 onRefreshHackathons={fetchHackathons}
                 onRefreshProjects={fetchProjects}
                 onUpdateProject={handleUpdateProject}
+                onDeleteProject={handleDeleteProject}
+                onSelectProject={handleSelectProject}
                 showToast={showToast}
                 onNavigate={setActiveView}
+                initialTab={adminTab}
               />
             ) : (
               <AccessDenied onBack={() => setActiveView('discover-projects')} />

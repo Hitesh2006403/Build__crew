@@ -2,6 +2,8 @@ import express from "express";
 import mongoose from "mongoose";
 import Team from "../models/Team.js";
 import Project from "../models/Project.js";
+import Invitation from "../models/Invitation.js";
+import Notification from "../models/Notification.js";
 import { authenticateUser } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -106,6 +108,40 @@ router.put("/:id", authenticateUser, async (req, res) => {
     return res.json({ success: true, team });
   } catch (err) {
     return res.status(500).json({ error: "Failed to update team.", details: err.message });
+  }
+});
+
+// DELETE /api/teams/:id - Delete team (Admin only)
+router.delete("/:id", authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid team ID format." });
+    }
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ error: "Forbidden: Administrator privileges required to delete teams." });
+    }
+
+    const team = await Team.findById(id);
+    if (!team) {
+      return res.status(404).json({ error: "Team not found." });
+    }
+
+    // Delete associated invitations & notifications
+    const invs = await Invitation.find({ team: team._id });
+    const invIds = invs.map((i) => i._id.toString());
+    await Notification.deleteMany({
+      $or: [
+        { relatedId: team._id.toString() },
+        { relatedId: { $in: invIds } },
+      ],
+    });
+    await Invitation.deleteMany({ team: team._id });
+    await Team.findByIdAndDelete(id);
+
+    return res.json({ success: true, message: "Team deleted successfully from MongoDB." });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to delete team.", details: err.message });
   }
 });
 
