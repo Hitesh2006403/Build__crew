@@ -303,10 +303,6 @@ export default function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Opening Splash Screen State
-  const [showSplash, setShowSplash] = useState(true);
-  const [isSplashFading, setIsSplashFading] = useState(false);
-
   // Toast notification
   const [toastMessage, setToastMessage] = useState(null);
   const [popupNotification, setPopupNotification] = useState(null);
@@ -451,15 +447,10 @@ export default function App() {
   // Hydrate session and initial MongoDB platform data on mount
   useEffect(() => {
     let isMounted = true;
-    let removeTimeoutId = null;
 
     const safetyTimer = setTimeout(() => {
       if (isMounted) {
         setIsAuthResolving(false);
-        setIsSplashFading(true);
-        removeTimeoutId = setTimeout(() => {
-          if (isMounted) setShowSplash(false);
-        }, 400);
       }
     }, 1500);
 
@@ -515,12 +506,6 @@ export default function App() {
       } finally {
         if (isMounted) {
           setIsAuthResolving(false);
-          setIsSplashFading(true);
-          removeTimeoutId = setTimeout(() => {
-            if (isMounted) {
-              setShowSplash(false);
-            }
-          }, 400);
         }
       }
     };
@@ -530,7 +515,6 @@ export default function App() {
     return () => {
       isMounted = false;
       clearTimeout(safetyTimer);
-      if (removeTimeoutId) clearTimeout(removeTimeoutId);
     };
   }, [fetchBuilders, fetchHackathons, fetchProjects, fetchUserData]);
 
@@ -966,22 +950,6 @@ export default function App() {
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-background font-body-md text-on-surface antialiased relative">
-        {showSplash && (
-          <div 
-            className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ease-in-out ${
-              isSplashFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
-            }`}
-          >
-            <div className="flex flex-col items-center justify-center p-6 animate-splash">
-              <img 
-                src="/buildcrew-splash-logo.png" 
-                alt="BuildCrew" 
-                className="w-72 sm:w-96 max-w-[85vw] max-h-[60vh] object-contain select-none" 
-              />
-            </div>
-          </div>
-        )}
-
         <Routes>
           <Route path="/login" element={
             <Auth
@@ -1070,23 +1038,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col font-body-md antialiased relative">
-      {/* Splash Screen on initial load */}
-      {showSplash && (
-        <div 
-          className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ease-in-out ${
-            isSplashFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
-          }`}
-        >
-          <div className="flex flex-col items-center justify-center p-6 animate-splash">
-            <img 
-              src="/buildcrew-splash-logo.png" 
-              alt="BuildCrew" 
-              className="w-72 sm:w-96 max-w-[85vw] max-h-[60vh] object-contain select-none" 
-            />
-          </div>
-        </div>
-      )}
-
       {/* Navigation Sidebar (Desktop fixed sidebar + Mobile slide-over drawer) */}
       <Sidebar
         activeView={activeView}
@@ -1103,7 +1054,7 @@ export default function App() {
       />
 
       {/* Main Content Area (Mobile: pl-0, Desktop: pl-72) */}
-      <div className="pl-0 lg:pl-72 min-h-screen flex flex-col w-full max-w-full overflow-x-hidden">
+      <div className="pl-0 lg:pl-72 min-h-screen flex flex-col w-full">
         {/* Sticky Top Header */}
         <Header
           activeView={activeView}
@@ -1135,7 +1086,7 @@ export default function App() {
         />
 
         {/* Dynamic View Router */}
-        <main className="w-full pt-16 bg-surface min-h-screen px-3 sm:px-4 lg:px-space-lg py-4 sm:py-space-lg pb-24 lg:pb-space-lg flex-1 overflow-x-hidden">
+        <main className="w-full pt-16 bg-surface min-h-screen px-3 sm:px-4 lg:px-space-lg py-4 sm:py-space-lg pb-24 lg:pb-space-lg flex-1">
           <Routes>
             {/* Student Platform Routes */}
             <Route path="/dashboard" element={
