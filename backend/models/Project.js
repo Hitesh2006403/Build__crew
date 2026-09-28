@@ -176,6 +176,36 @@ const projectSchema = new mongoose.Schema(
   }
 );
 
+projectSchema.pre("save", function () {
+  // Deduplicate members
+  if (Array.isArray(this.members)) {
+    const seen = new Set();
+    const unique = [];
+    for (const m of this.members) {
+      const idStr = m ? (m._id || m).toString() : null;
+      if (idStr && !seen.has(idStr)) {
+        seen.add(idStr);
+        unique.push(m);
+      }
+    }
+    this.members = unique;
+  }
+
+  const capacity = Number(this.totalCapacity) || 4;
+  if (this.members && this.members.length > capacity) {
+    throw new Error("Team is full.");
+  }
+
+  if (this.members && this.members.length > 0) {
+    this.filledCount = this.members.length;
+  }
+
+  if (this.filledCount >= capacity) {
+    this.recruitingBadge = "Squad Full";
+  }
+});
+
 const Project = mongoose.model("Project", projectSchema);
 
 export default Project;
+

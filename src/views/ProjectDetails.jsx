@@ -113,9 +113,10 @@ export default function ProjectDetails({
     });
   });
 
-  const confirmedMembers = Array.from(memberMap.values());
-  const totalCapacity = Number(project.totalCapacity) || 4;
-  const currentTeamSize = confirmedMembers.length;
+  const totalCapacity = Math.max(1, Number(project.totalCapacity) || 4);
+  const confirmedMembers = Array.from(memberMap.values()).slice(0, totalCapacity);
+  const currentTeamSize = Math.min(confirmedMembers.length, totalCapacity);
+  const isTeamFull = currentTeamSize >= totalCapacity || project.status === 'full' || project.recruitingBadge === 'Squad Full';
 
   // Real open roles from MongoDB
   const rawVacancies = Array.isArray(project.openVacancies) && project.openVacancies.length > 0
@@ -138,6 +139,10 @@ export default function ProjectDetails({
     const title = cleanText(r.title || r.roleName || r.name || r);
     return Boolean(title);
   });
+
+  // Only display the "Looking For" section when the project actually has one or more unfilled roles.
+  // When there are 0 open roles, hide the entire section.
+  const hasOpenRoles = availableRoles.length > 0 && !isTeamFull;
 
   // Apply Modal handlers
   const handleOpenApplyModal = (role) => {
@@ -406,27 +411,23 @@ export default function ProjectDetails({
         )}
       </section>
 
-      {/* 4. LOOKING FOR (Open Roles) */}
-      <section className="bg-surface-container-lowest rounded-2xl shadow-sm p-space-lg lg:p-space-xl border border-surface-container-high/40">
-        <div className="flex items-center justify-between mb-space-md">
-          <div className="flex items-center gap-space-sm">
-            <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
-              <span className="material-symbols-outlined text-lg">person_search</span>
+      {/* 4. LOOKING FOR (Open Roles) - Only shown when project actually has unfilled roles */}
+      {hasOpenRoles && (
+        <section className="bg-surface-container-lowest rounded-2xl shadow-sm p-space-lg lg:p-space-xl border border-surface-container-high/40">
+          <div className="flex items-center justify-between mb-space-md">
+            <div className="flex items-center gap-space-sm">
+              <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+                <span className="material-symbols-outlined text-lg">person_search</span>
+              </div>
+              <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">
+                Looking For
+              </h2>
             </div>
-            <h2 className="font-headline-sm text-headline-sm text-on-surface font-bold">
-              Looking For
-            </h2>
+            <span className="px-3 py-1 rounded-full bg-secondary-container text-on-secondary font-label-md text-label-md font-semibold">
+              {availableRoles.length} {availableRoles.length === 1 ? 'Role Open' : 'Roles Open'}
+            </span>
           </div>
-          <span className="px-3 py-1 rounded-full bg-secondary-container text-on-secondary font-label-md text-label-md font-semibold">
-            {availableRoles.length} {availableRoles.length === 1 ? 'Role Open' : 'Roles Open'}
-          </span>
-        </div>
 
-        {availableRoles.length === 0 ? (
-          <div className="text-center py-8 text-on-surface-variant font-body-md text-body-md bg-surface-container-low rounded-xl">
-            No open roles are currently listed for this team.
-          </div>
-        ) : (
           <div className="space-y-space-md">
             {availableRoles.map((role, idx) => {
               const roleTitle = role.title || role.roleName || role.name || role;
@@ -484,8 +485,8 @@ export default function ProjectDetails({
               );
             })}
           </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {/* 4. Simple Application Modal */}
       {isApplyModalOpen && (

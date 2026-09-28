@@ -78,10 +78,11 @@ app.get("/api/bootstrap", optionalAuth, async (req, res) => {
       Project.find()
         .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
         .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
-        .sort({ createdAt: -1 }),
-      Hackathon.find(hackathonQuery).sort({ createdAt: -1 }),
-      User.find().select("-password").sort({ createdAt: -1 }),
-      HackathonTeam.find().populate("createdBy", "name email avatar").sort({ createdAt: -1 }),
+        .sort({ createdAt: -1 })
+        .lean(),
+      Hackathon.find(hackathonQuery).sort({ createdAt: -1 }).lean(),
+      User.find().select("-password").sort({ createdAt: -1 }).lean(),
+      HackathonTeam.find().populate("createdBy", "name email avatar").sort({ createdAt: -1 }).lean(),
     ]);
 
     return res.json({

@@ -9,8 +9,24 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
   const [maximumTeamSize, setMaximumTeamSize] = useState('');
   const [expectedCompletionDate, setExpectedCompletionDate] = useState('');
   const [githubRepository, setGithubRepository] = useState('');
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // Today's date in YYYY-MM-DD for minimum date restriction
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   if (!isOpen) return null;
+
+  const hasUnsavedChanges = Boolean(
+    title.trim() ||
+    problemBeingSolved.trim() ||
+    whatAreYouBuilding.trim() ||
+    category.trim() ||
+    roles.length > 0 ||
+    maximumTeamSize ||
+    expectedCompletionDate ||
+    githubRepository.trim()
+  );
 
   const resetForm = () => {
     setTitle('');
@@ -21,11 +37,38 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
     setMaximumTeamSize('');
     setExpectedCompletionDate('');
     setGithubRepository('');
+    setShowDiscardConfirm(false);
   };
 
-  const handleClose = () => {
+  const handleAttemptClose = (e) => {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
+    if (hasUnsavedChanges) {
+      setShowDiscardConfirm(true);
+    } else {
+      resetForm();
+      onClose();
+    }
+  };
+
+  const handleConfirmDiscard = (e) => {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
+    setShowDiscardConfirm(false);
     resetForm();
     onClose();
+  };
+
+  const handleKeepEditing = (e) => {
+    if (e) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopPropagation === 'function') e.stopPropagation();
+    }
+    setShowDiscardConfirm(false);
   };
 
   const handleAddRole = () => {
@@ -115,8 +158,11 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-primary-container/40 backdrop-blur-sm animate-modal">
-      <div className="fixed inset-0" onClick={handleClose} />
-      <div className="relative w-full max-w-xl bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high overflow-hidden z-10 p-space-lg max-h-[90vh] overflow-y-auto">
+      {/* Modal Dialog: Clicking outside does NOT close or erase entered data */}
+      <div 
+        onClick={(e) => e.stopPropagation()} 
+        className="relative w-full max-w-xl bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high overflow-hidden z-10 p-space-lg max-h-[90vh] overflow-y-auto"
+      >
         <div className="flex items-start justify-between mb-space-md">
           <div>
             <div className="flex items-center gap-1 text-secondary font-label-sm text-label-sm font-bold uppercase tracking-wider mb-0.5">
@@ -132,11 +178,12 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
           </div>
           <button 
             type="button" 
-            onClick={handleClose}
+            onClick={handleAttemptClose}
             className="p-1.5 rounded-xl hover:bg-surface-container text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer"
             title="Close"
+            aria-label="Close"
           >
-            <span className="material-symbols-outlined text-xl">close</span>
+            <span className="material-symbols-outlined text-xl pointer-events-none">close</span>
           </button>
         </div>
 
@@ -284,8 +331,13 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
               </label>
               <input
                 type="date"
+                min={todayStr}
                 value={expectedCompletionDate}
-                onChange={(e) => setExpectedCompletionDate(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val && val < todayStr) return;
+                  setExpectedCompletionDate(val);
+                }}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all cursor-pointer"
               />
             </div>
@@ -309,7 +361,7 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
           <div className="pt-3 flex items-center justify-end gap-2 border-t border-surface-container-high/60">
             <button
               type="button"
-              onClick={handleClose}
+              onClick={handleAttemptClose}
               className="px-4 py-2.5 rounded-xl bg-surface-container-low hover:bg-surface-container text-on-surface font-title-sm text-title-sm transition-all cursor-pointer"
             >
               Cancel
@@ -324,6 +376,51 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
           </div>
         </form>
       </div>
+
+      {/* Discard Changes Confirmation Dialog */}
+      {showDiscardConfirm && (
+        <div 
+          style={{ zIndex: 100 }}
+          onClick={(e) => e.stopPropagation()}
+          className="fixed inset-0 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-modal"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bg-surface-container-lowest rounded-2xl p-5 shadow-2xl border border-surface-container-high space-y-4 relative z-10"
+          >
+            <div className="flex items-center gap-3">
+              <span className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-2xl">help_outline</span>
+              </span>
+              <div>
+                <h4 className="font-bold text-on-surface text-base">
+                  Discard your changes?
+                </h4>
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  You have unsaved changes that will be lost.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleKeepEditing}
+                className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-title-sm text-xs font-semibold transition-all cursor-pointer"
+              >
+                Keep Editing
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDiscard}
+                className="px-4 py-2 rounded-xl bg-error hover:bg-error/90 text-on-error font-title-sm text-xs font-bold shadow-sm transition-all cursor-pointer"
+              >
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

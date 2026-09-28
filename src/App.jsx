@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import CommandPalette from './components/CommandPalette';
@@ -26,10 +26,15 @@ import invitationsApi from './api/invitations';
 import notificationsApi from './api/notifications';
 
 export default function App() {
-  // Authentication & Role Routing state
-  const [currentUser, setCurrentUser] = useState(null);
-  const [activeView, setActiveView] = useState('discover-projects');
+  // Authentication & Role Routing state - initialized from localStorage if available
+  const [currentUser, setCurrentUser] = useState(() => authApi.getStoredUser());
+  const [activeView, setActiveView] = useState(() => {
+    const stored = authApi.getStoredUser();
+    return stored?.role === 'admin' ? 'admin-dashboard' : 'discover-projects';
+  });
   const [viewingProfileUserId, setViewingProfileUserId] = useState(null);
+  const [isAuthResolving, setIsAuthResolving] = useState(() => Boolean(authApi.getToken()));
+  const [applicationsTab, setApplicationsTab] = useState('received');
 
   // Backend Hydrated States from MongoDB Atlas
   const [projects, setProjects] = useState([]);
@@ -42,7 +47,6 @@ export default function App() {
   const [receivedInvitations, setReceivedInvitations] = useState([]);
   const [sentInvitations, setSentInvitations] = useState([]);
   const [hackathonSquads, setHackathonSquads] = useState([]);
-  const [isBackendLoading, setIsBackendLoading] = useState(true);
   const [backendError, setBackendError] = useState(null);
 
   // Modals state
@@ -56,29 +60,25 @@ export default function App() {
   const [showSplash, setShowSplash] = useState(true);
   const [isSplashFading, setIsSplashFading] = useState(false);
 
-  // Splash Screen Lifecycle: Show for 1.8s then smoothly fade out over 700ms
-  useEffect(() => {
-    const fadeTimer = setTimeout(() => {
-      setIsSplashFading(true);
-    }, 1800);
-
-    const removeTimer = setTimeout(() => {
-      setShowSplash(false);
-    }, 2500);
-
-    return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(removeTimer);
-    };
-  }, []);
-
   // Toast notification
   const [toastMessage, setToastMessage] = useState(null);
+  const [popupNotification, setPopupNotification] = useState(null);
+  const popupTimerRef = useRef(null);
+  const knownNotificationIdsRef = useRef(new Set());
+  const isFirstNotifLoadRef = useRef(true);
 
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
+
+  const showNotificationToast = useCallback((notif) => {
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    setPopupNotification(notif);
+    popupTimerRef.current = setTimeout(() => {
+      setPopupNotification(null);
+    }, 4500);
+  }, []);
 
   // =========================================================================
   // 🔌 Fetch Platform Data from MongoDB API
@@ -118,7 +118,10 @@ export default function App() {
     }
   }, []);
 
+  const isFetchingUserDataRef = useRef(false);
   const fetchUserData = useCallback(async () => {
+    if (isFetchingUserDataRef.current) return;
+    isFetchingUserDataRef.current = true;
     try {
       const [appsRes, notifsRes, invsRes] = await Promise.allSettled([
         applicationsApi.getApplications(),
@@ -130,7 +133,44 @@ export default function App() {
         setApplications(appsRes.value);
       }
       if (notifsRes.status === 'fulfilled' && Array.isArray(notifsRes.value)) {
-        setNotifications(notifsRes.value);
+        const notifs = notifsRes.value;
+        setNotifications(notifs);
+
+        if (isFirstNotifLoadRef.current) {
+          notifs.forEach(n => {
+            if (n._id) knownNotificationIdsRef.current.add(String(n._id));
+          });
+          isFirstNotifLoadRef.current = false;
+        } else {
+          // Identify unread notifications that arrived since last check
+          const newNotifs = notifs.filter(n => n._id && !knownNotificationIdsRef.current.has(String(n._id)) && !n.read);
+          notifs.forEach(n => {
+            if (n._id) knownNotificationIdsRef.current.add(String(n._id));
+          });
+
+          if (newNotifs.length > 0) {
+            const latest = newNotifs[0];
+            let toastText = '';
+            if (latest.type === 'application_accepted') {
+              toastText = 'Your application was accepted.';
+            } else if (latest.type === 'application_rejected') {
+              toastText = 'Your application was rejected.';
+            } else if (latest.type === 'invitation_received') {
+              toastText = 'You received a team invitation.';
+            } else if (latest.type === 'application_received') {
+              toastText = latest.message || 'Someone applied to your project.';
+            } else {
+              toastText = latest.message || 'New notification received.';
+            }
+
+            showNotificationToast({
+              title: latest.title,
+              message: toastText,
+              reason: latest.reason || latest.rejectionReason,
+              type: latest.type,
+            });
+          }
+        }
       }
       if (invsRes.status === 'fulfilled' && invsRes.value) {
         const received = Array.isArray(invsRes.value.received) ? invsRes.value.received : [];
@@ -140,63 +180,68 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Could not load user data from backend:', err);
+    } finally {
+      isFetchingUserDataRef.current = false;
     }
-  }, []);
+  }, [showNotificationToast]);
 
   // Hydrate session and initial MongoDB platform data on mount
   useEffect(() => {
     let isMounted = true;
+    let removeTimeoutId = null;
 
     // Safety timeout: ensure loading screen is never stuck
     const safetyTimer = setTimeout(() => {
       if (isMounted) {
-        setIsBackendLoading(false);
+        setIsAuthResolving(false);
+        setIsSplashFading(true);
+        removeTimeoutId = setTimeout(() => {
+          if (isMounted) setShowSplash(false);
+        }, 400);
       }
-    }, 3000);
+    }, 1500);
 
     const initializeSessionAndData = async () => {
       try {
-        setIsBackendLoading(true);
         setBackendError(null);
 
-        // 1. Session Re-hydration from JWT if token is stored
-        let authenticatedUser = null;
+        // Run authentication verification and database bootstrap concurrently
         const storedToken = authApi.getToken();
-        if (storedToken) {
-          try {
-            const authData = await authApi.getMe();
-            if (authData?.user) {
-              authenticatedUser = authData.user;
-              if (isMounted) {
-                setCurrentUser(authenticatedUser);
-                if (authenticatedUser.role === 'admin') {
-                  setActiveView('admin-dashboard');
-                } else {
-                  setActiveView('discover-projects');
-                }
-              }
-            }
-          } catch {
-            // Expired or invalid token - clear session cleanly
-            authApi.logout();
-          }
-        }
+        const authPromise = storedToken
+          ? authApi.getMe().catch(() => {
+              authApi.logout();
+              return null;
+            })
+          : Promise.resolve(null);
 
-        // 2. Fetch initial platform data from MongoDB Atlas
-        try {
-          const res = await fetch('http://localhost:5000/api/bootstrap');
-          if (res.ok) {
-            const payload = await res.json();
-            const data = payload.data || {};
-            if (isMounted) {
-              const loadedProjects = Array.isArray(data.projects) ? data.projects : [];
-              setProjects(loadedProjects);
-              setSelectedProject(prev => prev || (loadedProjects.length > 0 ? loadedProjects[0] : null));
-              setHackathons(Array.isArray(data.hackathons) ? data.hackathons : []);
-              setSquadWins(Array.isArray(data.squadWins) ? data.squadWins : []);
-              setBuilders(Array.isArray(data.builders) ? data.builders : []);
-              setHackathonSquads(Array.isArray(data.hackathonSquads) ? data.hackathonSquads : []);
+        const bootstrapPromise = fetch('http://localhost:5000/api/bootstrap')
+          .then(res => res.ok ? res.json() : null)
+          .catch(() => null);
+
+        const [authResult, bootstrapResult] = await Promise.all([authPromise, bootstrapPromise]);
+
+        if (isMounted) {
+          if (authResult?.user) {
+            setCurrentUser(authResult.user);
+            if (authResult.user.role === 'admin') {
+              setActiveView('admin-dashboard');
+            } else {
+              setActiveView('discover-projects');
             }
+          } else if (storedToken && !authResult) {
+            setCurrentUser(null);
+            setActiveView('discover-projects');
+          }
+
+          if (bootstrapResult?.data) {
+            const data = bootstrapResult.data;
+            const loadedProjects = Array.isArray(data.projects) ? data.projects : [];
+            setProjects(loadedProjects);
+            setSelectedProject(prev => prev || (loadedProjects.length > 0 ? loadedProjects[0] : null));
+            setHackathons(Array.isArray(data.hackathons) ? data.hackathons : []);
+            setSquadWins(Array.isArray(data.squadWins) ? data.squadWins : []);
+            setBuilders(Array.isArray(data.builders) ? data.builders : []);
+            setHackathonSquads(Array.isArray(data.hackathonSquads) ? data.hackathonSquads : []);
           } else {
             await Promise.allSettled([
               fetchProjects(),
@@ -204,28 +249,23 @@ export default function App() {
               fetchBuilders()
             ]);
           }
-        } catch {
-          await Promise.allSettled([
-            fetchProjects(),
-            fetchHackathons(),
-            fetchBuilders()
-          ]);
         }
 
-        // 3. If authenticated, fetch user applications, notifications, and invitations
-        if (authenticatedUser && isMounted) {
-          try {
-            await fetchUserData();
-          } catch {
-            // Silently continue
-          }
+        const effectiveUser = authResult?.user || (storedToken ? authApi.getStoredUser() : null);
+        if (effectiveUser && isMounted) {
+          fetchUserData().catch(() => {});
         }
-
       } catch (err) {
         console.error('Platform initialization failed:', err);
       } finally {
         if (isMounted) {
-          setIsBackendLoading(false);
+          setIsAuthResolving(false);
+          setIsSplashFading(true);
+          removeTimeoutId = setTimeout(() => {
+            if (isMounted) {
+              setShowSplash(false);
+            }
+          }, 400);
         }
       }
     };
@@ -235,8 +275,9 @@ export default function App() {
     return () => {
       isMounted = false;
       clearTimeout(safetyTimer);
+      if (removeTimeoutId) clearTimeout(removeTimeoutId);
     };
-  }, []);
+  }, [fetchBuilders, fetchHackathons, fetchProjects, fetchUserData]);
 
   // Auth Handlers
   const handleLoginSuccess = async (user) => {
@@ -254,6 +295,36 @@ export default function App() {
     await fetchProjects();
   };
 
+  // Real-time polling for application/invitation events when user is logged in
+  useEffect(() => {
+    if (!currentUser) return;
+    let isPolling = false;
+
+    const poll = async () => {
+      if (isPolling) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      isPolling = true;
+      try {
+        await fetchUserData();
+      } finally {
+        isPolling = false;
+      }
+    };
+
+    const intervalId = setInterval(poll, 7000);
+
+    const onFocus = () => {
+      poll();
+    };
+
+    window.addEventListener('focus', onFocus);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [currentUser, fetchUserData]);
+
   const handleLogout = () => {
     authApi.logout();
     setCurrentUser(null);
@@ -262,6 +333,9 @@ export default function App() {
     setNotifications([]);
     setReceivedInvitations([]);
     setSentInvitations([]);
+    knownNotificationIdsRef.current.clear();
+    isFirstNotifLoadRef.current = true;
+    setPopupNotification(null);
     showToast('Signed out of BuildCrew session.');
   };
 
@@ -272,7 +346,7 @@ export default function App() {
     } catch (e) {
       console.warn('Failed to cache user session:', e);
     }
-    showToast('Profile updated successfully in MongoDB!');
+    showToast('Profile changes saved successfully.');
   };
 
   // Hackathons management
@@ -333,17 +407,33 @@ export default function App() {
       const res = await applicationsApi.applyToProject({
         projectId: targetId,
         requestedRole: newApp.role || 'Core Contributor',
-        message: newApp.note || 'Applying to collaborate on project.',
+        message: newApp.note || newApp.message || 'Applying to collaborate on project.',
       });
-      const savedApp = res.application || newApp;
-      setApplications(prev => [savedApp, ...prev]);
-      showToast(`Application sent for ${newApp.role} in ${newApp.projectTitle || 'project'}!`);
-      // Re-sync projects and notifications from MongoDB
+      const savedApp = res.application || res;
+      setApplications(prev => [savedApp, ...prev.filter(a => String(a._id || a.id) !== String(savedApp._id || savedApp.id))]);
+      showToast('Application sent to the project owner.');
+      // Re-sync projects and notifications in background
       fetchProjects();
       fetchUserData();
+      return savedApp;
     } catch (err) {
       console.error('Apply error:', err);
       showToast(err.message || 'Application could not be submitted');
+      throw err;
+    }
+  };
+
+  const handleUpdateApplicationStatus = async (appId, status, reason = '') => {
+    try {
+      await applicationsApi.updateStatus(appId, status, reason);
+      showToast(status === 'accepted' ? 'Application accepted! Applicant added to squad.' : 'Application rejected.');
+      await Promise.allSettled([
+        fetchUserData(),
+        fetchProjects()
+      ]);
+    } catch (err) {
+      console.error('Update application status error:', err);
+      showToast(err.message || 'Failed to update application');
     }
   };
 
@@ -354,7 +444,7 @@ export default function App() {
       setProjects(prev => [savedProj, ...prev]);
       setSelectedProject(savedProj);
       setActiveView('project-details');
-      showToast(`Project "${savedProj.title}" launched successfully in MongoDB!`);
+      showToast(`Project "${savedProj.title}" launched successfully!`);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error('Failed to create project:', err);
@@ -379,7 +469,7 @@ export default function App() {
         fetchProjects(),
         fetchUserData()
       ]);
-      showToast(res?.message || 'Project and associated team data deleted permanently from MongoDB.');
+      showToast(res?.message || 'Project and associated team data deleted permanently.');
       return res;
     } catch (err) {
       console.error('Delete project failed:', err);
@@ -409,7 +499,7 @@ export default function App() {
       }
 
       const res = await invitationsApi.sendInvitation(payload);
-      showToast(res.message || 'Invitation sent successfully in MongoDB!');
+      showToast(res.message || 'Invitation sent successfully!');
       await fetchUserData();
     } catch (err) {
       console.error('Invitation error:', err);
@@ -419,7 +509,7 @@ export default function App() {
 
   const handleAcceptInvitation = async (invitationId) => {
     try {
-      const res = await invitationsApi.respondInvitation(invitationId, 'accepted');
+      await invitationsApi.respondInvitation(invitationId, 'accepted');
       showToast('Invitation accepted! You have joined the squad.');
       await Promise.allSettled([
         fetchUserData(),
@@ -488,15 +578,31 @@ export default function App() {
     }
   };
 
+  // While authentication and the current user are being loaded:
+  // Render ONLY the BuildCrew loading / splash screen.
+  // Never temporarily render the Admin page or any other default page while authentication is loading.
+  if (isAuthResolving) {
+    return (
+      <div className="fixed inset-0 z-[99999] bg-white flex flex-col items-center justify-center select-none">
+        <div className="flex flex-col items-center justify-center p-6 animate-splash">
+          <img 
+            src="/buildcrew-splash-logo.png" 
+            alt="BuildCrew" 
+            className="w-72 sm:w-96 max-w-[85vw] max-h-[60vh] object-contain select-none" 
+          />
+        </div>
+      </div>
+    );
+  }
+
   // If unauthenticated: render complete Auth flow
   if (!currentUser) {
-    const hasToken = !!authApi.getToken();
     return (
       <div className="min-h-screen bg-background font-body-md text-on-surface antialiased relative">
         {/* Opening Splash Screen centered on clean white background */}
         {showSplash && (
           <div 
-            className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-700 ease-in-out ${
+            className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ease-in-out ${
               isSplashFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
             }`}
           >
@@ -510,19 +616,7 @@ export default function App() {
           </div>
         )}
 
-        {isBackendLoading && hasToken ? (
-          <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
-            <div className="w-12 h-12 rounded-2xl bg-secondary/20 flex items-center justify-center mb-4">
-              <span className="material-symbols-outlined text-secondary text-2xl animate-spin">sync</span>
-            </div>
-            <h2 className="font-bold text-lg text-on-surface">Connecting to BuildCrew Backend...</h2>
-            <p className="text-sm text-on-surface-variant mt-1">
-              Hydrating platform state from MongoDB Atlas (buildcrew_db)
-            </p>
-          </div>
-        ) : (
-          <Auth onLoginSuccess={handleLoginSuccess} />
-        )}
+        <Auth onLoginSuccess={handleLoginSuccess} />
 
         {backendError && (
           <div className="fixed bottom-6 left-6 z-50 bg-error-container text-on-error-container px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 font-body-sm text-body-sm">
@@ -548,16 +642,20 @@ export default function App() {
     );
   }
 
-  // Filter out any invitation notices from general notifications dropdown (invitations belong exclusively to Invitations section)
-  const generalNotifications = notifications.filter(n => n.type !== 'invitation_received');
-  const unreadCount = generalNotifications.filter(n => !n.read).length;
+  // Filter notifications: do not exclude invitation_received so users receive team invitation alerts
+  const unreadCount = notifications.filter(n => !n.read).length;
+  const currentUserId = String(currentUser?._id || currentUser?.id || '');
+  const pendingReceivedApplicationsCount = applications.filter(a => {
+    const applicantId = String(a.applicant?._id || a.applicant || '');
+    return applicantId !== currentUserId && (a.status || 'pending').toLowerCase() === 'pending';
+  }).length;
 
   return (
     <div className="min-h-screen bg-background text-on-surface flex flex-col font-body-md antialiased relative">
       {/* Opening Splash Screen centered on clean white background */}
       {showSplash && (
         <div 
-          className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-700 ease-in-out ${
+          className={`fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center transition-opacity duration-500 ease-in-out ${
             isSplashFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
           }`}
         >
@@ -579,6 +677,7 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         pendingInvitationsCount={receivedInvitations.filter(i => i.status === 'pending').length}
+        pendingApplicationsCount={pendingReceivedApplicationsCount}
         adminTab={adminTab}
         onSelectAdminTab={setAdminTab}
       />
@@ -597,11 +696,15 @@ export default function App() {
             }
           }}
           notificationCount={unreadCount}
-          notifications={generalNotifications}
+          notifications={notifications}
           onMarkRead={handleMarkNotificationRead}
           onMarkAllRead={handleMarkAllNotificationsRead}
           onNavigateProfile={() => handleNavigateView('profile')}
           onNavigateInvitations={() => handleNavigateView('invitations')}
+          onNavigateApplications={(tab = 'received') => {
+            setApplicationsTab(tab);
+            handleNavigateView('my-applications');
+          }}
           currentUser={currentUser}
           onLogout={handleLogout}
           onOpenAdminDashboard={(tab = 'hackathons') => {
@@ -641,6 +744,7 @@ export default function App() {
               setSearchQuery={setSearchQuery}
               onSelectProject={handleSelectProject}
               onQuickApply={handleQuickApply}
+              currentUser={currentUser}
             />
           )}
 
@@ -678,6 +782,7 @@ export default function App() {
               sentInvitations={sentInvitations}
               onInvite={handleInviteBuilder}
               onViewProfile={handleViewProfile}
+              onAddBuilder={handleAddBuilder}
               showToast={showToast}
               currentUser={currentUser}
             />
@@ -695,7 +800,11 @@ export default function App() {
           {activeView === 'my-applications' && (
             <MyApplications
               applications={applications}
+              currentUser={currentUser}
               onSelectProjectById={handleSelectProjectById}
+              initialTab={applicationsTab}
+              onTabChange={setApplicationsTab}
+              onUpdateStatus={handleUpdateApplicationStatus}
             />
           )}
 
@@ -713,17 +822,20 @@ export default function App() {
           )}
 
           {activeView === 'my-teams' && (() => {
+            const currentUserId = String(currentUser?._id || currentUser?.id || '');
             const myProjectTeams = projects.filter(p => {
               if (!currentUser) return false;
-              const isOwner = (p.createdBy?._id || p.createdBy) === currentUser._id;
-              const isMember = Array.isArray(p.members) && p.members.some(m => (m._id || m) === currentUser._id);
+              const ownerId = String(p.createdBy?._id || p.createdBy || '');
+              const isOwner = ownerId && ownerId === currentUserId;
+              const isMember = Array.isArray(p.members) && p.members.some(m => String(m._id || m || '') === currentUserId);
               return isOwner || isMember;
             });
 
             const myHackTeams = hackathonSquads.filter(h => {
               if (!currentUser) return false;
-              const isOwner = (h.createdBy?._id || h.createdBy) === currentUser._id;
-              const isMember = Array.isArray(h.members) && h.members.some(m => (m._id || m) === currentUser._id);
+              const ownerId = String(h.createdBy?._id || h.createdBy || '');
+              const isOwner = ownerId && ownerId === currentUserId;
+              const isMember = Array.isArray(h.members) && h.members.some(m => String(m._id || m || '') === currentUserId);
               return isOwner || isMember;
             });
 
@@ -770,7 +882,7 @@ export default function App() {
                               </span>
                             </div>
                             <span className="font-label-sm text-label-sm text-secondary font-semibold">
-                              {p.filledCount || (p.members?.length || 1)}/{p.totalCapacity || 4} Members
+                              {Math.min(Array.isArray(p.members) && p.members.length > 0 ? p.members.length : (p.filledCount || 1), p.totalCapacity || 4)}/{p.totalCapacity || 4} Members
                             </span>
                           </div>
                           <div>
@@ -815,7 +927,7 @@ export default function App() {
                               </span>
                             </div>
                             <span className="font-label-sm text-label-sm text-secondary font-semibold">
-                              {h.filledCount || (h.members?.length || 1)}/{h.totalCapacity || 4} Members
+                              {Math.min(Array.isArray(h.members) && h.members.length > 0 ? h.members.length : (h.filledCount || 1), h.totalCapacity || 4)}/{h.totalCapacity || 4} Members
                             </span>
                           </div>
                           <div>
@@ -867,7 +979,10 @@ export default function App() {
       {/* Post Project Modal */}
       <PostProjectModal
         isOpen={isPostProjectOpen}
-        onClose={() => setIsPostProjectOpen(false)}
+        onClose={() => {
+          setIsPostProjectOpen(false);
+          setActiveView('discover-projects');
+        }}
         onAddProject={handleAddProject}
         currentUser={currentUser}
       />
@@ -893,7 +1008,68 @@ export default function App() {
           <button
             type="button"
             onClick={() => setToastMessage(null)}
-            className="ml-2 text-on-surface-variant hover:text-on-primary"
+            className="ml-2 text-on-surface-variant hover:text-on-primary cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-base">close</span>
+          </button>
+        </div>
+      )}
+
+      {/* Small Non-Blocking Notification Toast/Pop-up */}
+      {popupNotification && (
+        <div 
+          onClick={() => {
+            if (popupNotification.type === 'application_rejected' || popupNotification.type === 'application_accepted') {
+              setApplicationsTab('sent');
+              handleNavigateView('my-applications');
+            } else if (popupNotification.type === 'application_received') {
+              setApplicationsTab('received');
+              handleNavigateView('my-applications');
+            } else if (popupNotification.type === 'invitation_received') {
+              handleNavigateView('invitations');
+            }
+            setPopupNotification(null);
+          }}
+          className={`fixed ${toastMessage ? 'bottom-20' : 'bottom-6'} right-6 z-50 max-w-sm bg-slate-900 text-white p-3.5 rounded-2xl shadow-2xl border border-slate-700/60 flex items-start gap-3 cursor-pointer hover:bg-slate-800 transition-all animate-modal`}
+          role="alert"
+        >
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5" style={{
+            backgroundColor: popupNotification.type === 'application_accepted' ? 'rgba(16, 185, 129, 0.2)' :
+                             popupNotification.type === 'application_rejected' ? 'rgba(244, 63, 94, 0.2)' :
+                             'rgba(99, 102, 241, 0.2)',
+            color: popupNotification.type === 'application_accepted' ? '#34d399' :
+                   popupNotification.type === 'application_rejected' ? '#fb7185' :
+                   '#818cf8'
+          }}>
+            <span className="material-symbols-outlined text-lg">
+              {popupNotification.type === 'application_accepted' ? 'check_circle' :
+               popupNotification.type === 'application_rejected' ? 'cancel' :
+               'notifications'}
+            </span>
+          </div>
+
+          <div className="flex-1 min-w-0 pr-1">
+            <p className="font-semibold text-xs text-white leading-snug">
+              {popupNotification.message}
+            </p>
+            {popupNotification.reason && (
+              <p className="text-[11px] text-slate-300 mt-1 line-clamp-2">
+                Reason: {popupNotification.reason}
+              </p>
+            )}
+            <span className="text-[10px] text-slate-400 block mt-1">
+              Click to view in {popupNotification.type === 'invitation_received' ? 'Invitations' : 'My Applications'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPopupNotification(null);
+            }}
+            className="text-slate-400 hover:text-white p-0.5 rounded-md shrink-0 cursor-pointer"
+            aria-label="Dismiss notification"
           >
             <span className="material-symbols-outlined text-base">close</span>
           </button>

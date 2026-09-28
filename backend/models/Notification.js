@@ -35,6 +35,10 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    reason: {
+      type: String,
+      default: "",
+    },
     read: {
       type: Boolean,
       default: false,

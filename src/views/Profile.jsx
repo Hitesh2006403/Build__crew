@@ -103,7 +103,7 @@ export default function Profile({
         onUpdateUser(updated);
       }
       if (showToast) {
-        showToast('Profile updated successfully in MongoDB!');
+        showToast('Profile changes saved successfully.');
       }
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
@@ -124,7 +124,7 @@ export default function Profile({
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center text-on-surface-variant gap-3">
         <span className="material-symbols-outlined text-3xl text-secondary animate-spin">sync</span>
-        <p className="font-medium text-sm">Fetching student profile from MongoDB...</p>
+        <p className="font-medium text-sm">Loading student profile...</p>
       </div>
     );
   }
@@ -415,7 +415,7 @@ export default function Profile({
               {saved ? (
                 <span className="text-secondary font-semibold text-title-sm flex items-center gap-1">
                   <span className="material-symbols-outlined text-base">check_circle</span>
-                  Profile changes saved to MongoDB!
+                  Profile changes saved successfully.
                 </span>
               ) : <span></span>}
 
@@ -424,7 +424,7 @@ export default function Profile({
                 disabled={isSubmitting}
                 className="px-6 py-2.5 rounded-xl bg-primary text-on-primary font-title-sm text-title-sm shadow-md hover:bg-surface-tint active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50 font-semibold"
               >
-                {isSubmitting ? 'Saving to MongoDB...' : 'Save Profile'}
+                {isSubmitting ? 'Saving...' : 'Save Profile'}
               </button>
             </div>
           </form>

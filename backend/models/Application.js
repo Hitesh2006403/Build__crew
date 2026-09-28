@@ -57,6 +57,10 @@ const applicationSchema = new mongoose.Schema(
       type: String,
       default: "Just now",
     },
+    rejectionReason: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,

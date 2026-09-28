@@ -61,7 +61,7 @@ export default function MyProjects({ projects, currentUser, onSelectProject, onO
                       {p.categoryBadge || p.category || 'Project'}
                     </span>
                     <span className="text-secondary font-semibold font-label-sm text-label-sm">
-                      {p.filledCount}/{p.totalCapacity} Members
+                      {Math.min(p.members?.length || p.filledCount || 1, p.totalCapacity || 4)}/{p.totalCapacity || 4} Members
                     </span>
                   </div>
                   <h3 className="font-title-md text-title-md font-bold text-on-surface mt-2">

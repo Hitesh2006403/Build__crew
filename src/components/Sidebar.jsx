@@ -5,6 +5,7 @@ export default function Sidebar({
   currentUser, 
   onLogout,
   pendingInvitationsCount = 0,
+  pendingApplicationsCount = 0,
   adminTab = 'hackathons',
   onSelectAdminTab
 }) {
@@ -18,7 +19,7 @@ export default function Sidebar({
 
   const myWorkNav = [
     { id: 'my-projects', label: 'My Projects', icon: 'rocket_launch' },
-    { id: 'my-applications', label: 'My Applications', icon: 'assignment' },
+    { id: 'my-applications', label: 'My Applications', icon: 'assignment', badge: pendingApplicationsCount },
     { id: 'invitations', label: 'Invitations', icon: 'mail', badge: pendingInvitationsCount },
     { id: 'my-teams', label: 'My Teams', icon: 'diversity_3' },
   ];

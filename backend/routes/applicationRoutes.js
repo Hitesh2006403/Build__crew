@@ -14,7 +14,7 @@ router.get("/", authenticateUser, async (req, res) => {
       return res.json([]);
     }
     // Find projects owned by user
-    const ownedProjects = await Project.find({ createdBy: req.user._id }).select("_id");
+    const ownedProjects = await Project.find({ createdBy: req.user._id }).select("_id").lean();
     const ownedProjectIds = ownedProjects.map((p) => p._id);
 
     // Applications either created by user OR submitted to user's projects
@@ -23,7 +23,8 @@ router.get("/", authenticateUser, async (req, res) => {
     })
       .populate("project", "title categoryBadge type lead")
       .populate("applicant", "name email avatar university role skills")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.json(applications);
   } catch (err) {
@@ -89,8 +90,8 @@ router.post("/", authenticateUser, async (req, res) => {
     await Notification.create({
       recipient: project.createdBy,
       type: "application_received",
-      title: "New Project Application",
-      message: `${req.user.name} applied for "${targetRole}" in your project "${project.title}".`,
+      title: "Project Application",
+      message: `${req.user.name} applied to your project.`,
       relatedId: newApp._id.toString(),
       read: false,
     });
@@ -101,7 +102,7 @@ router.post("/", authenticateUser, async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Application submitted successfully to MongoDB.",
+      message: "Application sent to the project owner.",
       application: populated,
     });
   } catch (err) {
@@ -114,7 +115,8 @@ router.post("/", authenticateUser, async (req, res) => {
 router.patch("/:id/status", authenticateUser, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, reason, rejectionReason } = req.body;
+    const reasonText = (reason || rejectionReason || "").trim();
 
     if (!["accepted", "rejected", "withdrawn"].includes(status)) {
       return res.status(400).json({ error: "Invalid status value." });
@@ -144,6 +146,17 @@ router.patch("/:id/status", authenticateUser, async (req, res) => {
       }
     }
 
+    // Before accepting an application, verify that the team has available capacity
+    if (status === "accepted") {
+      const currentCount = Array.isArray(project.members) ? project.members.length : (project.filledCount || 1);
+      const capacity = Number(project.totalCapacity) || 4;
+      const alreadyMember = project.members.some((m) => m.toString() === application.applicant.toString());
+
+      if (!alreadyMember && currentCount >= capacity) {
+        return res.status(400).json({ error: "Team is full." });
+      }
+    }
+
     application.status = status;
     application.statusColor =
       status === "accepted"
@@ -151,13 +164,20 @@ router.patch("/:id/status", authenticateUser, async (req, res) => {
         : status === "rejected"
         ? "bg-rose-100 text-rose-800"
         : "bg-surface-container text-on-surface-variant";
+    if (status === "rejected" && reasonText) {
+      application.rejectionReason = reasonText;
+    }
     await application.save();
 
     // If accepted: add applicant to project members in MongoDB
     if (status === "accepted") {
       if (!project.members.map((m) => m.toString()).includes(application.applicant.toString())) {
         project.members.push(application.applicant);
-        project.filledCount = Math.min(project.totalCapacity, (project.filledCount || 1) + 1);
+        project.filledCount = project.members.length;
+        if (project.filledCount >= (Number(project.totalCapacity) || 4)) {
+          project.recruitingBadge = "Squad Full";
+          project.status = "full";
+        }
         await project.save();
       }
 
@@ -171,11 +191,13 @@ router.patch("/:id/status", authenticateUser, async (req, res) => {
         read: false,
       });
     } else if (status === "rejected") {
+      const notifMsg = `Your application for ${project.title} was rejected.`;
       await Notification.create({
         recipient: application.applicant,
         type: "application_rejected",
         title: "Application Status Update",
-        message: `Your application for "${application.requestedRole}" in "${project.title}" was not selected.`,
+        message: notifMsg,
+        reason: reasonText,
         relatedId: project._id.toString(),
         read: false,
       });

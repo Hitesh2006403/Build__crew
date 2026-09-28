@@ -19,14 +19,16 @@ router.get("/my", authenticateUser, async (req, res) => {
       .populate("project", "title categoryBadge type members totalCapacity filledCount")
       .populate("team", "teamName")
       .populate("hackathonTeam", "teamName title hackathonTitle members totalCapacity filledCount")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     const sent = await Invitation.find({ sender: req.user._id })
       .populate("receiver", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge type members totalCapacity filledCount")
       .populate("team", "teamName")
       .populate("hackathonTeam", "teamName title hackathonTitle members totalCapacity filledCount")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.json({ received, sent });
   } catch (err) {
@@ -112,10 +114,10 @@ router.post("/", authenticateUser, async (req, res) => {
       }
 
       // Rule: Do not allow invitations when the team is already full
-      const currentCount = project.filledCount || project.members.length || 1;
-      const capacity = project.totalCapacity || 4;
+      const currentCount = Array.isArray(project.members) && project.members.length > 0 ? project.members.length : (project.filledCount || 1);
+      const capacity = Number(project.totalCapacity) || 4;
       if (currentCount >= capacity) {
-        return res.status(400).json({ error: `Team "${project.title}" has reached its maximum capacity (${capacity} members).` });
+        return res.status(400).json({ error: "Team is full." });
       }
 
       // Rule: Do not allow duplicate pending invitations for the same user and team
@@ -152,10 +154,10 @@ router.post("/", authenticateUser, async (req, res) => {
       }
 
       // Rule: Capacity check
-      const currentCount = hTeam.filledCount || hTeam.members.length || 1;
-      const capacity = hTeam.totalCapacity || 4;
+      const currentCount = Array.isArray(hTeam.members) && hTeam.members.length > 0 ? hTeam.members.length : (hTeam.filledCount || 1);
+      const capacity = Number(hTeam.totalCapacity) || 4;
       if (currentCount >= capacity) {
-        return res.status(400).json({ error: `Team "${targetTeamName}" is already full (${capacity} members).` });
+        return res.status(400).json({ error: "Team is full." });
       }
 
       // Rule: Duplicate pending check
@@ -181,6 +183,16 @@ router.post("/", authenticateUser, async (req, res) => {
       role: role || "Teammate / Contributor",
       message: message || `${req.user.name} invited you to join ${targetTeamName}!`,
       status: "pending",
+    });
+
+    // Create Notification for the invited student in MongoDB
+    await Notification.create({
+      recipient: receiver._id,
+      type: "invitation_received",
+      title: "Team Invitation",
+      message: "You received a team invitation.",
+      relatedId: invitation._id.toString(),
+      read: false,
     });
 
     // Send email invitation to User B's registered email address
@@ -255,6 +267,37 @@ router.patch("/:id", authenticateUser, async (req, res) => {
       return res.status(400).json({ error: `This invitation has already been ${invitation.status}.` });
     }
 
+    // Before accepting an invitation, verify that the team has available capacity
+    if (status === "accepted") {
+      if (invitation.project) {
+        const project = await Project.findById(invitation.project._id || invitation.project);
+        if (!project) {
+          return res.status(404).json({ error: "Target project team not found." });
+        }
+        const currentCount = Array.isArray(project.members) ? project.members.length : (project.filledCount || 1);
+        const capacity = Number(project.totalCapacity) || 4;
+        const currentMemberIds = project.members.map((m) => m.toString());
+        const alreadyMember = currentMemberIds.includes(req.user._id.toString());
+        if (!alreadyMember && currentCount >= capacity) {
+          return res.status(400).json({ error: "Team is full." });
+        }
+      }
+
+      if (invitation.hackathonTeam) {
+        const hTeam = await HackathonTeam.findById(invitation.hackathonTeam._id || invitation.hackathonTeam);
+        if (!hTeam) {
+          return res.status(404).json({ error: "Target hackathon team not found." });
+        }
+        const currentCount = Array.isArray(hTeam.members) ? hTeam.members.length : (hTeam.filledCount || 1);
+        const capacity = Number(hTeam.totalCapacity) || 4;
+        const currentMemberIds = hTeam.members.map((m) => m.toString());
+        const alreadyMember = currentMemberIds.includes(req.user._id.toString());
+        if (!alreadyMember && currentCount >= capacity) {
+          return res.status(400).json({ error: "Team is full." });
+        }
+      }
+    }
+
     invitation.status = status;
     await invitation.save();
 
@@ -268,9 +311,10 @@ router.patch("/:id", authenticateUser, async (req, res) => {
           const currentMemberIds = project.members.map((m) => m.toString());
           if (!currentMemberIds.includes(req.user._id.toString())) {
             project.members.push(req.user._id);
-            project.filledCount = Math.min(project.totalCapacity || 4, (project.filledCount || 1) + 1);
-            if (project.filledCount >= (project.totalCapacity || 4)) {
+            project.filledCount = project.members.length;
+            if (project.filledCount >= (Number(project.totalCapacity) || 4)) {
               project.recruitingBadge = "Squad Full";
+              project.status = "full";
             }
             await project.save();
           }
@@ -283,8 +327,8 @@ router.patch("/:id", authenticateUser, async (req, res) => {
           const currentMemberIds = hTeam.members.map((m) => m.toString());
           if (!currentMemberIds.includes(req.user._id.toString())) {
             hTeam.members.push(req.user._id);
-            hTeam.filledCount = Math.min(hTeam.totalCapacity || 4, (hTeam.filledCount || 1) + 1);
-            if (hTeam.filledCount >= (hTeam.totalCapacity || 4)) {
+            hTeam.filledCount = hTeam.members.length;
+            if (hTeam.filledCount >= (Number(hTeam.totalCapacity) || 4)) {
               hTeam.status = "full";
             }
             await hTeam.save();

@@ -12,10 +12,10 @@ export const applicationsApi = {
     });
   },
 
-  updateStatus: async (id, status) => {
+  updateStatus: async (id, status, reason = '') => {
     return await apiClient(`/applications/${id}/status`, {
       method: 'PATCH',
-      body: { status },
+      body: { status, reason },
     });
   },
 

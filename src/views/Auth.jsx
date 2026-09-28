@@ -424,7 +424,7 @@ export default function Auth({ onLoginSuccess }) {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="name@buildcrew.com or student@university.edu"
+                      placeholder="Enter your email address"
                       className="w-full pl-9 pr-3.5 py-2.5 rounded-xl bg-surface-container-low border border-transparent focus:border-secondary focus:bg-surface-container-lowest outline-none text-xs sm:text-sm text-on-surface placeholder:text-on-surface-variant transition-all font-medium"
                     />
                   </div>
@@ -601,7 +601,7 @@ export default function Auth({ onLoginSuccess }) {
                     required
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="name@buildcrew.com or student@stanford.edu"
+                    placeholder="Enter your email address"
                     className="w-full px-3.5 py-2 rounded-xl bg-surface-container-low border border-transparent focus:border-secondary focus:bg-surface-container-lowest outline-none text-xs sm:text-sm text-on-surface transition-all font-medium"
                   />
                 </div>

@@ -189,7 +189,7 @@ export default function Invitations({
         {isLoading ? (
           <div className="flex flex-col items-center justify-center p-12 text-center text-on-surface-variant gap-3">
             <span className="material-symbols-outlined text-3xl text-secondary animate-spin">sync</span>
-            <p className="font-medium text-sm">Fetching invitations from MongoDB...</p>
+            <p className="font-medium text-sm">Fetching invitations...</p>
           </div>
         ) : activeTab === 'received' ? (
           /* ===================== RECEIVED TAB ===================== */

@@ -50,12 +50,30 @@ export default function DiscoverProjects({
   searchQuery = '',
   setSearchQuery,
   onSelectProject, 
-  onQuickApply 
+  onQuickApply,
+  currentUser
 }) {
   const [activeFilterPill, setActiveFilterPill] = useState('all');
   const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'spots'
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6;
+
+  // Resolve logged-in user's MongoDB user ID
+  const loggedInUserId = useMemo(() => {
+    if (currentUser) {
+      return String(currentUser._id || currentUser.id || '');
+    }
+    try {
+      const stored = localStorage.getItem('buildcrew_user');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return String(parsed._id || parsed.id || '');
+      }
+    } catch {
+      // ignore
+    }
+    return '';
+  }, [currentUser]);
 
   const hasActiveFilters = Boolean(
     searchQuery.trim() ||
@@ -71,6 +89,17 @@ export default function DiscoverProjects({
   // Filter & Sort logic based ONLY on real MongoDB data
   const filteredProjects = useMemo(() => {
     let result = projects.filter(p => {
+      // Rule: Do NOT show projects created by the currently logged-in user in Discover Projects list.
+      // Filter ONLY by the real MongoDB user ID / createdBy relationship (not by comparing names).
+      if (loggedInUserId) {
+        const creatorId = p.createdBy
+          ? String(typeof p.createdBy === 'object' ? (p.createdBy._id || p.createdBy.id || '') : p.createdBy)
+          : '';
+        if (creatorId && creatorId === loggedInUserId) {
+          return false;
+        }
+      }
+
       // Search query matching
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -142,7 +171,7 @@ export default function DiscoverProjects({
     });
 
     return result;
-  }, [projects, searchQuery, activeFilterPill, sortBy]);
+  }, [projects, searchQuery, activeFilterPill, sortBy, loggedInUserId]);
 
   const totalPages = Math.max(1, Math.ceil(filteredProjects.length / itemsPerPage));
   const paginatedProjects = filteredProjects.slice(
@@ -288,18 +317,21 @@ export default function DiscoverProjects({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {paginatedProjects.map((project) => {
-            const actualMembersCount = Array.isArray(project.members) && project.members.length > 0
+            const maxTeamSize = Math.max(1, Number(project.totalCapacity) || 4);
+            const rawMembersCount = Array.isArray(project.members) && project.members.length > 0
               ? project.members.length
               : (Number(project.filledCount) || 1);
-            const maxTeamSize = Number(project.totalCapacity) || 4;
+            const actualMembersCount = Math.min(rawMembersCount, maxTeamSize);
             const isTeamFull = actualMembersCount >= maxTeamSize || project.status === 'full' || project.recruitingBadge === 'Squad Full';
 
-            const creator = typeof project.createdBy === 'object' && project.createdBy !== null
+            // Real project creator from MongoDB createdBy user relationship
+            const creator = (typeof project.createdBy === 'object' && project.createdBy !== null)
               ? project.createdBy
               : (project.lead || {});
-            const creatorName = creator.name || 'Student Builder';
+            const creatorName = (creator.name || '').trim() || 'Student Builder';
             const creatorCollege = cleanText(creator.college || creator.university);
             const creatorAvatar = creator.avatar || creator.profileImage || '';
+            const creatorAvatarLetter = (creatorName.charAt(0) || 'U').toUpperCase();
             const description = cleanText(project.tagline || project.whatAreYouBuilding || project.problemBeingSolved || project.fullDescription);
             const realCategory = getRealCategory(project);
             
@@ -414,7 +446,7 @@ export default function DiscoverProjects({
                         {creatorAvatar ? (
                           <img
                             src={creatorAvatar}
-                            alt=""
+                            alt={creatorName}
                             className="w-7 h-7 rounded-full object-cover shrink-0"
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
@@ -426,9 +458,9 @@ export default function DiscoverProjects({
                         ) : null}
                         <div 
                           style={{ display: creatorAvatar ? 'none' : 'flex' }}
-                          className="w-7 h-7 rounded-full bg-secondary/15 text-secondary font-bold text-xs items-center justify-center shrink-0"
+                          className="w-7 h-7 rounded-full bg-secondary/15 text-secondary font-bold text-xs items-center justify-center shrink-0 select-none"
                         >
-                          {(creatorName || 'P').charAt(0).toUpperCase()}
+                          {creatorAvatarLetter}
                         </div>
                       </div>
                       <div className="flex flex-col min-w-0">

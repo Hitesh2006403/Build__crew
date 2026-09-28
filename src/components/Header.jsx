@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 export default function Header({ 
   activeView,
@@ -11,12 +11,40 @@ export default function Header({
   onMarkAllRead,
   onNavigateProfile,
   onNavigateInvitations,
+  onNavigateApplications,
   currentUser,
   onLogout,
   onOpenAdminDashboard
 }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+
+  const notificationsRef = useRef(null);
+  const userMenuRef = useRef(null);
+
+  const avatarLetter = (currentUser?.name || '').trim().charAt(0).toUpperCase() || 'U';
+
+  // Close notifications or profile dropdown when clicking outside
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target)) {
+        setShowNotifications(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    if (showNotifications || showUserMenu) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      document.addEventListener('touchstart', handleOutsideClick);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [showNotifications, showUserMenu]);
 
   const handleInputChange = (e) => {
     setSearchQuery(e.target.value);
@@ -86,7 +114,7 @@ export default function Header({
         )}
 
           {/* Notifications Button */}
-        <div className="relative">
+        <div className="relative" ref={notificationsRef}>
           <button 
             aria-label="Notifications" 
             onClick={() => setShowNotifications(!showNotifications)}
@@ -131,7 +159,13 @@ export default function Header({
                       key={n._id || idx}
                       onClick={() => {
                         if (onMarkRead) onMarkRead(n._id);
-                        if (n.type === 'invitation_received' && onNavigateInvitations) {
+                        if (n.type === 'application_received' && onNavigateApplications) {
+                          setShowNotifications(false);
+                          onNavigateApplications('received');
+                        } else if ((n.type === 'application_rejected' || n.type === 'application_accepted') && onNavigateApplications) {
+                          setShowNotifications(false);
+                          onNavigateApplications('sent');
+                        } else if (n.type === 'invitation_received' && onNavigateInvitations) {
                           setShowNotifications(false);
                           onNavigateInvitations();
                         }
@@ -146,9 +180,14 @@ export default function Header({
                           {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent'}
                         </span>
                       </div>
-                      <p className="text-on-surface-variant text-body-sm line-clamp-2">
+                      <p className="text-on-surface-variant text-body-sm">
                         {n.message}
                       </p>
+                      {n.reason && (
+                        <p className="text-xs text-on-surface-variant/85 mt-1 pl-2 border-l-2 border-secondary/40">
+                          {n.reason}
+                        </p>
+                      )}
                     </div>
                   ))
                 )}
@@ -160,31 +199,15 @@ export default function Header({
         <div className="h-5 w-px bg-surface-container-high mx-1"></div>
 
         {/* Profile Avatar Button & Menu */}
-        <div className="relative">
-          <div 
+        <div className="relative" ref={userMenuRef}>
+          <button 
+            type="button"
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="cursor-pointer"
+            className="w-8 h-8 rounded-full bg-secondary/15 text-secondary font-bold text-xs flex items-center justify-center shadow-xs hover:ring-2 hover:ring-secondary/40 transition-all select-none cursor-pointer focus:outline-none"
+            aria-label="User Profile Menu"
           >
-            {currentUser?.avatar ? (
-              <img 
-                alt="" 
-                className="w-8 h-8 rounded-full object-cover shadow-xs hover:ring-2 hover:ring-secondary/40 transition-all" 
-                src={currentUser.avatar}
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  if (e.currentTarget.nextElementSibling) {
-                    e.currentTarget.nextElementSibling.style.display = 'flex';
-                  }
-                }}
-              />
-            ) : null}
-            <div 
-              style={{ display: currentUser?.avatar ? 'none' : 'flex' }}
-              className="w-8 h-8 rounded-full bg-secondary/15 text-secondary font-bold text-xs items-center justify-center shadow-xs hover:ring-2 hover:ring-secondary/40 transition-all"
-            >
-              {(currentUser?.name || 'U').charAt(0).toUpperCase()}
-            </div>
-          </div>
+            {avatarLetter}
+          </button>
 
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-64 bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-high p-3 z-50 animate-modal">
