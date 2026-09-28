@@ -101,12 +101,19 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// Helper method to remove password before returning JSON
+// Helper method to remove password and guarantee avatar/profileImage synchronization
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;
+  if (user.profileImage && !user.avatar) user.avatar = user.profileImage;
+  if (user.avatar && !user.profileImage) user.profileImage = user.avatar;
   return user;
 };
+
+userSchema.pre("save", function () {
+  if (this.profileImage && !this.avatar) this.avatar = this.profileImage;
+  if (this.avatar && !this.profileImage) this.profileImage = this.avatar;
+});
 
 const User = mongoose.model("User", userSchema);
 

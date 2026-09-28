@@ -15,7 +15,7 @@ const router = express.Router();
 router.get("/my", authenticateUser, async (req, res) => {
   try {
     const received = await Invitation.find({ receiver: req.user._id })
-      .populate("sender", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("sender", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge type members totalCapacity filledCount")
       .populate("team", "teamName")
       .populate("hackathonTeam", "teamName title hackathonTitle members totalCapacity filledCount")
@@ -23,7 +23,7 @@ router.get("/my", authenticateUser, async (req, res) => {
       .lean();
 
     const sent = await Invitation.find({ sender: req.user._id })
-      .populate("receiver", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("receiver", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge type members totalCapacity filledCount")
       .populate("team", "teamName")
       .populate("hackathonTeam", "teamName title hackathonTitle members totalCapacity filledCount")
@@ -211,8 +211,8 @@ router.post("/", authenticateUser, async (req, res) => {
     }
 
     const populated = await Invitation.findById(invitation._id)
-      .populate("sender", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
-      .populate("receiver", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("sender", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+      .populate("receiver", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge")
       .populate("hackathonTeam", "teamName title hackathonTitle");
 
@@ -369,8 +369,8 @@ router.patch("/:id", authenticateUser, async (req, res) => {
     }
 
     const updated = await Invitation.findById(id)
-      .populate("sender", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
-      .populate("receiver", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("sender", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+      .populate("receiver", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge members totalCapacity filledCount")
       .populate("hackathonTeam", "teamName title members totalCapacity filledCount");
 

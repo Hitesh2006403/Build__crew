@@ -22,7 +22,7 @@ router.get("/", authenticateUser, async (req, res) => {
       $or: [{ applicant: req.user._id }, { project: { $in: ownedProjectIds } }],
     })
       .populate("project", "title categoryBadge type lead")
-      .populate("applicant", "name email avatar university role skills")
+      .populate("applicant", "name email avatar profileImage university role skills")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -98,7 +98,7 @@ router.post("/", authenticateUser, async (req, res) => {
 
     const populated = await Application.findById(newApp._id)
       .populate("project", "title categoryBadge type lead")
-      .populate("applicant", "name email avatar university role");
+      .populate("applicant", "name email avatar profileImage university role");
 
     return res.status(201).json({
       success: true,

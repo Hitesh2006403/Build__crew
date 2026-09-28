@@ -146,7 +146,10 @@ export default function MyApplications({
           ) : (
             <div className="space-y-space-md">
               {receivedApplications.map((app, idx) => {
-                const applicantName = app.applicantName || app.applicant?.name || 'Student Applicant';
+                const applicant = typeof app.applicant === 'object' && app.applicant !== null ? app.applicant : {};
+                const isApplicantSelf = currentUser && String(applicant._id || applicant.id || app.applicant) === String(currentUser._id);
+                const applicantName = (isApplicantSelf ? currentUser.name : (app.applicantName || applicant.name)) || 'Student Applicant';
+                const applicantAvatar = (isApplicantSelf ? (currentUser.avatar || currentUser.profileImage) : null) || applicant.avatar || applicant.profileImage || '';
                 const applicantLetter = applicantName.trim().charAt(0).toUpperCase() || 'S';
                 const isPending = (app.status || 'pending').toLowerCase() === 'pending';
                 const isCurrentProcessing = processingId === app._id;
@@ -158,8 +161,26 @@ export default function MyApplications({
                   >
                     <div className="space-y-2">
                       <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-secondary/15 text-secondary font-bold text-sm flex items-center justify-center shrink-0">
-                          {applicantLetter}
+                        <div className="relative w-9 h-9 shrink-0">
+                          {applicantAvatar ? (
+                            <img
+                              src={applicantAvatar}
+                              alt=""
+                              className="w-9 h-9 rounded-full object-cover shrink-0"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                if (e.currentTarget.nextElementSibling) {
+                                  e.currentTarget.nextElementSibling.style.display = 'flex';
+                                }
+                              }}
+                            />
+                          ) : null}
+                          <div
+                            style={{ display: applicantAvatar ? 'none' : 'flex' }}
+                            className="w-9 h-9 rounded-full bg-secondary/15 text-secondary font-bold text-sm items-center justify-center shrink-0"
+                          >
+                            {applicantLetter}
+                          </div>
                         </div>
                         <div>
                           <div className="flex items-center gap-2">

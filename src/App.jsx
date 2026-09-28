@@ -24,6 +24,7 @@ import usersApi from './api/users';
 import applicationsApi from './api/applications';
 import invitationsApi from './api/invitations';
 import notificationsApi from './api/notifications';
+import { API_BASE_URL } from './api/client';
 
 export default function App() {
   // Authentication & Role Routing state - initialized from localStorage if available
@@ -214,7 +215,7 @@ export default function App() {
             })
           : Promise.resolve(null);
 
-        const bootstrapPromise = fetch('http://localhost:5000/api/bootstrap')
+        const bootstrapPromise = fetch(`${API_BASE_URL}/bootstrap`)
           .then(res => res.ok ? res.json() : null)
           .catch(() => null);
 
@@ -340,12 +341,120 @@ export default function App() {
   };
 
   const handleUpdateUser = (updatedUser) => {
+    if (!updatedUser) return;
     setCurrentUser(updatedUser);
     try {
       localStorage.setItem('buildcrew_user', JSON.stringify(updatedUser));
     } catch (e) {
       console.warn('Failed to cache user session:', e);
     }
+
+    const updatedAvatar = updatedUser.avatar || updatedUser.profileImage || '';
+    const userIdStr = String(updatedUser._id || updatedUser.id);
+
+    // 1. Synchronize projects state (createdBy, lead, and confirmed members)
+    setProjects(prevProjects =>
+      prevProjects.map(proj => {
+        let modified = false;
+        const newProj = { ...proj };
+
+        const creatorId = typeof newProj.createdBy === 'object' && newProj.createdBy !== null
+          ? String(newProj.createdBy._id || newProj.createdBy.id)
+          : String(newProj.createdBy);
+
+        if (creatorId && creatorId === userIdStr) {
+          modified = true;
+          newProj.createdBy = typeof newProj.createdBy === 'object' && newProj.createdBy !== null
+            ? { ...newProj.createdBy, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name }
+            : { _id: updatedUser._id, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name };
+          if (newProj.lead) {
+            newProj.lead = { ...newProj.lead, avatar: updatedAvatar, leadAvatarFull: updatedAvatar, name: updatedUser.name };
+          }
+        }
+
+        if (Array.isArray(newProj.members)) {
+          const updatedMembers = newProj.members.map(m => {
+            const mId = typeof m === 'object' && m !== null ? String(m._id || m.id) : String(m);
+            if (mId && mId === userIdStr) {
+              modified = true;
+              return typeof m === 'object' && m !== null
+                ? { ...m, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name }
+                : { _id: updatedUser._id, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name };
+            }
+            return m;
+          });
+          if (modified) newProj.members = updatedMembers;
+        }
+
+        return modified ? newProj : proj;
+      })
+    );
+
+    // 2. Synchronize selectedProject if currently viewing
+    setSelectedProject(prev => {
+      if (!prev) return null;
+      let modified = false;
+      const newProj = { ...prev };
+
+      const creatorId = typeof newProj.createdBy === 'object' && newProj.createdBy !== null
+        ? String(newProj.createdBy._id || newProj.createdBy.id)
+        : String(newProj.createdBy);
+
+      if (creatorId && creatorId === userIdStr) {
+        modified = true;
+        newProj.createdBy = typeof newProj.createdBy === 'object' && newProj.createdBy !== null
+          ? { ...newProj.createdBy, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name }
+          : { _id: updatedUser._id, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name };
+        if (newProj.lead) {
+          newProj.lead = { ...newProj.lead, avatar: updatedAvatar, leadAvatarFull: updatedAvatar, name: updatedUser.name };
+        }
+      }
+
+      if (Array.isArray(newProj.members)) {
+        const updatedMembers = newProj.members.map(m => {
+          const mId = typeof m === 'object' && m !== null ? String(m._id || m.id) : String(m);
+          if (mId && mId === userIdStr) {
+            modified = true;
+            return typeof m === 'object' && m !== null
+              ? { ...m, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name }
+              : { _id: updatedUser._id, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name };
+          }
+          return m;
+        });
+        if (modified) newProj.members = updatedMembers;
+      }
+
+      return modified ? newProj : prev;
+    });
+
+    // 3. Synchronize builders state
+    setBuilders(prev =>
+      prev.map(b => {
+        if (String(b._id || b.id) === userIdStr) {
+          return { ...b, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name };
+        }
+        return b;
+      })
+    );
+
+    // 4. Synchronize applications state
+    setApplications(prev =>
+      prev.map(app => {
+        const applicantId = typeof app.applicant === 'object' && app.applicant !== null
+          ? String(app.applicant._id || app.applicant.id)
+          : String(app.applicant);
+        if (applicantId && applicantId === userIdStr) {
+          return {
+            ...app,
+            applicant: typeof app.applicant === 'object' && app.applicant !== null
+              ? { ...app.applicant, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name }
+              : { _id: updatedUser._id, avatar: updatedAvatar, profileImage: updatedAvatar, name: updatedUser.name }
+          };
+        }
+        return app;
+      })
+    );
+
     showToast('Profile changes saved successfully.');
   };
 
@@ -745,6 +854,7 @@ export default function App() {
               onSelectProject={handleSelectProject}
               onQuickApply={handleQuickApply}
               currentUser={currentUser}
+              builders={builders}
             />
           )}
 

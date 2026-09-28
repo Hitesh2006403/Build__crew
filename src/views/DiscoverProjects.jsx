@@ -51,7 +51,8 @@ export default function DiscoverProjects({
   setSearchQuery,
   onSelectProject, 
   onQuickApply,
-  currentUser
+  currentUser,
+  builders = []
 }) {
   const [activeFilterPill, setActiveFilterPill] = useState('all');
   const [sortBy, setSortBy] = useState('newest'); // 'newest' | 'spots'
@@ -328,9 +329,23 @@ export default function DiscoverProjects({
             const creator = (typeof project.createdBy === 'object' && project.createdBy !== null)
               ? project.createdBy
               : (project.lead || {});
-            const creatorName = (creator.name || '').trim() || 'Student Builder';
-            const creatorCollege = cleanText(creator.college || creator.university);
-            const creatorAvatar = creator.avatar || creator.profileImage || '';
+            const creatorId = creator._id || creator.id || project.createdBy;
+            const isCreatorCurrentUser = currentUser?._id && String(creatorId) === String(currentUser._id);
+            const creatorName = (isCreatorCurrentUser ? currentUser.name : creator.name) || 'Student Builder';
+            const creatorCollege = cleanText((isCreatorCurrentUser ? (currentUser.college || currentUser.university) : null) || creator.college || creator.university);
+
+            // If creator is not currentUser and lacks an avatar, search builders array
+            const matchedBuilder = !isCreatorCurrentUser && creatorId && Array.isArray(builders)
+              ? builders.find(b => String(b._id || b.id) === String(creatorId))
+              : null;
+
+            const creatorAvatar = (isCreatorCurrentUser ? (currentUser.avatar || currentUser.profileImage) : null)
+              || creator.avatar 
+              || creator.profileImage 
+              || matchedBuilder?.avatar 
+              || matchedBuilder?.profileImage 
+              || project.lead?.avatar 
+              || '';
             const creatorAvatarLetter = (creatorName.charAt(0) || 'U').toUpperCase();
             const description = cleanText(project.tagline || project.whatAreYouBuilding || project.problemBeingSolved || project.fullDescription);
             const realCategory = getRealCategory(project);

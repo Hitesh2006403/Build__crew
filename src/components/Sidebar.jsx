@@ -202,11 +202,11 @@ export default function Sidebar({
             className="flex items-center gap-space-sm px-space-md py-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container transition-all cursor-pointer group"
           >
             <div className="relative shrink-0">
-              {currentUser?.avatar ? (
+              {currentUser?.avatar || currentUser?.profileImage ? (
                 <img 
                   alt="" 
                   className="w-9 h-9 rounded-full object-cover shadow-xs shrink-0" 
-                  src={currentUser.avatar}
+                  src={currentUser.avatar || currentUser.profileImage}
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     if (e.currentTarget.nextElementSibling) {
@@ -216,7 +216,7 @@ export default function Sidebar({
                 />
               ) : null}
               <div 
-                style={{ display: currentUser?.avatar ? 'none' : 'flex' }}
+                style={{ display: (currentUser?.avatar || currentUser?.profileImage) ? 'none' : 'flex' }}
                 className="w-9 h-9 rounded-full bg-secondary/15 text-secondary font-bold text-sm items-center justify-center shrink-0"
               >
                 {(currentUser?.name || 'U').charAt(0).toUpperCase()}

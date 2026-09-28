@@ -1,4 +1,16 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+// Determine API base URL dynamically:
+// 1. VITE_API_URL or VITE_API_BASE_URL from environment (e.g. deployed backend URL or custom API endpoint)
+// 2. In local development (vite dev), default to 'http://localhost:5000/api'
+// 3. In production, default to relative '/api' (for single-domain Vercel deployment with serverless rewrites)
+const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+  if (envUrl) {
+    return envUrl.endsWith('/api') ? envUrl : `${envUrl.replace(/\/+$/, '')}/api`;
+  }
+  return import.meta.env.DEV ? 'http://localhost:5000/api' : '/api';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export const getToken = () => {
   try {

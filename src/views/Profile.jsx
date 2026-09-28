@@ -93,6 +93,8 @@ export default function Profile({
         github: github.trim(),
         linkedin: linkedin.trim(),
         showEmailToTeam: Boolean(showEmailToTeam),
+        avatar: activeUser.avatar || activeUser.profileImage || '',
+        profileImage: activeUser.avatar || activeUser.profileImage || '',
       };
 
       const res = await usersApi.updateUser(currentUser._id, updatePayload);
@@ -119,6 +121,44 @@ export default function Profile({
   const activeUser = user || currentUser || {};
   const avatarUrl = activeUser.avatar || activeUser.profileImage || "";
   const displayCollege = cleanText(activeUser.college || activeUser.university);
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser?._id) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      if (showToast) showToast('Image file is too large. Please choose an image under 5MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result;
+      try {
+        setIsSubmitting(true);
+        const res = await usersApi.updateUser(currentUser._id, {
+          avatar: dataUrl,
+          profileImage: dataUrl,
+        });
+        const updated = res.user || res;
+        setUser(updated);
+        if (onUpdateUser) {
+          onUpdateUser(updated);
+        }
+        if (showToast) {
+          showToast('Profile image updated successfully.');
+        }
+      } catch (err) {
+        console.error('Failed to upload avatar:', err);
+        if (showToast) {
+          showToast(`Failed to upload avatar: ${err.message}`);
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   if (loadingProfile && !activeUser._id) {
     return (
@@ -160,7 +200,7 @@ export default function Profile({
         {/* User Card Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-md pb-space-md border-b border-surface-container-low">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-space-md">
-            <div className="relative shrink-0">
+            <div className="relative shrink-0 group">
               {avatarUrl ? (
                 <img
                   src={avatarUrl}
@@ -180,6 +220,26 @@ export default function Profile({
               >
                 {(activeUser.name || 'U').charAt(0).toUpperCase()}
               </div>
+
+              {!isViewingOther && (
+                <>
+                  <label
+                    htmlFor="profile-avatar-upload"
+                    className="absolute inset-0 rounded-full bg-black/40 text-white flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-inner"
+                    title="Change Profile Picture"
+                  >
+                    <span className="material-symbols-outlined text-2xl">photo_camera</span>
+                    <span className="text-[10px] font-bold">Change</span>
+                  </label>
+                  <input
+                    id="profile-avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                  />
+                </>
+              )}
             </div>
             <div className="space-y-1">
               <div className="flex items-center gap-2">

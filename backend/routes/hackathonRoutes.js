@@ -221,8 +221,8 @@ router.get("/:id/teams", async (req, res) => {
       : { hackathonId: id };
 
     const teams = await HackathonTeam.find(query)
-      .populate("createdBy", "name email avatar university role")
-      .populate("members", "name email avatar university role skills")
+      .populate("createdBy", "name email avatar profileImage university role")
+      .populate("members", "name email avatar profileImage university role skills")
       .sort({ createdAt: -1 });
 
     return res.json(teams);
@@ -290,8 +290,8 @@ router.post("/:id/teams", authenticateUser, async (req, res) => {
     await hackathon.save();
 
     const populated = await HackathonTeam.findById(newSquad._id)
-      .populate("createdBy", "name email avatar university role")
-      .populate("members", "name email avatar university role");
+      .populate("createdBy", "name email avatar profileImage university role")
+      .populate("members", "name email avatar profileImage university role");
 
     return res.status(201).json({
       success: true,

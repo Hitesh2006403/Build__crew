@@ -44,8 +44,8 @@ router.get("/", async (req, res) => {
     }
 
     const projects = await Project.find(query)
-      .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
-      .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+      .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+      .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
       .sort({ createdAt: -1 });
 
     return res.json(projects);
@@ -63,15 +63,15 @@ router.get("/:id", async (req, res) => {
 
     if (mongoose.Types.ObjectId.isValid(id)) {
       project = await Project.findById(id)
-        .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
-        .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam");
+        .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+        .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam");
     }
 
     if (!project) {
       // Fallback search by custom slug or title if applicable
       project = await Project.findOne({ $or: [{ _id: mongoose.Types.ObjectId.isValid(id) ? id : null }, { fullTitle: id }] })
-        .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
-        .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam");
+        .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+        .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam");
     }
 
     if (!project) {
@@ -175,8 +175,8 @@ router.post("/", authenticateUser, async (req, res) => {
     });
 
     const populated = await Project.findById(newProject._id)
-      .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
-      .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam");
+      .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+      .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam");
 
     return res.status(201).json({
       success: true,
@@ -231,8 +231,8 @@ router.put("/:id", authenticateUser, async (req, res) => {
     }
 
     const updated = await Project.findByIdAndUpdate(id, { $set: updates }, { new: true })
-      .populate("createdBy", "name email avatar university role")
-      .populate("members", "name email avatar university role");
+      .populate("createdBy", "name email avatar profileImage university role")
+      .populate("members", "name email avatar profileImage university role");
 
     return res.json({
       success: true,
@@ -357,8 +357,8 @@ router.patch("/:id/clear-team-full", authenticateUser, async (req, res) => {
     await project.save();
 
     const populated = await Project.findById(id)
-      .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
-      .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam");
+      .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+      .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam");
 
     return res.json({
       success: true,

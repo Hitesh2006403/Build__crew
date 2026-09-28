@@ -18,8 +18,8 @@ router.get("/", authenticateUser, async (req, res) => {
       $or: [{ owner: req.user._id }, { members: req.user._id }],
     })
       .populate("project", "title categoryBadge type lead")
-      .populate("owner", "name email avatar university role")
-      .populate("members", "name email avatar university role skills")
+      .populate("owner", "name email avatar profileImage university role")
+      .populate("members", "name email avatar profileImage university role skills")
       .sort({ createdAt: -1 });
 
     return res.json(teams);
@@ -38,8 +38,8 @@ router.get("/:id", authenticateUser, async (req, res) => {
 
     const team = await Team.findById(id)
       .populate("project")
-      .populate("owner", "name email avatar university role")
-      .populate("members", "name email avatar university role skills");
+      .populate("owner", "name email avatar profileImage university role")
+      .populate("members", "name email avatar profileImage university role skills");
 
     if (!team) {
       return res.status(404).json({ error: "Team not found." });
@@ -76,8 +76,8 @@ router.post("/", authenticateUser, async (req, res) => {
 
     const populated = await Team.findById(team._id)
       .populate("project")
-      .populate("owner", "name email avatar university role")
-      .populate("members", "name email avatar university role");
+      .populate("owner", "name email avatar profileImage university role")
+      .populate("members", "name email avatar profileImage university role");
 
     return res.status(201).json({ success: true, team: populated });
   } catch (err) {

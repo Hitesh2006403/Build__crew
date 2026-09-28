@@ -261,7 +261,7 @@ function cleanText(text) {
         ) : (
           filteredBuilders.map((b) => {
             const isSelf = currentUser && String(b._id || b.id) === String(currentUser._id);
-            const avatarImg = b.avatar || b.profileImage;
+            const avatarImg = (isSelf ? (currentUser.avatar || currentUser.profileImage) : null) || b.avatar || b.profileImage || '';
             const collegeName = cleanText(b.college || b.university);
             const branchName = b.branch || b.major || '';
             const semesterText = b.semester ? `Semester ${b.semester}` : (b.year ? `Class of ${b.year}` : '');

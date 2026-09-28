@@ -1,6 +1,7 @@
 import express from "express";
 import mongoose from "mongoose";
 import User from "../models/User.js";
+import Project from "../models/Project.js";
 import { authenticateUser } from "../middleware/auth.js";
 
 const router = express.Router();
@@ -122,6 +123,20 @@ router.put("/:id", authenticateUser, async (req, res) => {
     if (updates.avatar && !updates.profileImage) updates.profileImage = updates.avatar;
 
     const updatedUser = await User.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true });
+
+    // Synchronize lead avatar on all Projects created by this user in MongoDB
+    if (updates.avatar || updates.profileImage) {
+      const newAvatar = updates.avatar || updates.profileImage;
+      try {
+        await Project.updateMany(
+          { createdBy: id },
+          { $set: { "lead.avatar": newAvatar, "lead.leadAvatarFull": newAvatar } }
+        );
+      } catch (projErr) {
+        console.warn("Failed to synchronize lead avatar on projects:", projErr.message);
+      }
+    }
+
     return res.json({
       success: true,
       message: "Profile updated successfully.",

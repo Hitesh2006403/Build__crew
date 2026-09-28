@@ -203,28 +203,52 @@ export default function Header({
           <button 
             type="button"
             onClick={() => setShowUserMenu(!showUserMenu)}
-            className="w-8 h-8 rounded-full bg-secondary/15 text-secondary font-bold text-xs flex items-center justify-center shadow-xs hover:ring-2 hover:ring-secondary/40 transition-all select-none cursor-pointer focus:outline-none"
+            className="w-8 h-8 rounded-full bg-secondary/15 text-secondary font-bold text-xs flex items-center justify-center shadow-xs hover:ring-2 hover:ring-secondary/40 transition-all select-none cursor-pointer focus:outline-none overflow-hidden shrink-0"
             aria-label="User Profile Menu"
           >
-            {avatarLetter}
+            {(currentUser?.avatar || currentUser?.profileImage) ? (
+              <img 
+                src={currentUser.avatar || currentUser.profileImage} 
+                alt="" 
+                className="w-full h-full object-cover rounded-full shrink-0"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                  if (e.currentTarget.nextElementSibling) {
+                    e.currentTarget.nextElementSibling.style.display = 'flex';
+                  }
+                }}
+              />
+            ) : null}
+            <span style={{ display: (currentUser?.avatar || currentUser?.profileImage) ? 'none' : 'flex' }} className="items-center justify-center w-full h-full">
+              {avatarLetter}
+            </span>
           </button>
 
           {showUserMenu && (
             <div className="absolute right-0 mt-2 w-64 bg-surface-container-lowest rounded-2xl shadow-xl border border-surface-container-high p-3 z-50 animate-modal">
               <div className="p-2.5 rounded-xl bg-surface-container-low mb-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-on-surface">{currentUser?.name || 'Account'}</span>
-                  <span className={`px-2 py-0.2 rounded-full text-[10px] font-extrabold uppercase ${
-                    currentUser?.role === 'admin' ? 'bg-secondary text-on-secondary' : 'bg-secondary-fixed text-on-secondary-fixed'
-                  }`}>
-                    {currentUser?.role === 'admin' ? 'Admin' : 'Student'}
-                  </span>
-                </div>
-                {currentUser?.email && (
-                  <div className="text-[11px] text-on-surface-variant truncate mt-0.5">
-                    {currentUser.email}
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-full bg-secondary/15 text-secondary font-bold text-xs flex items-center justify-center shrink-0 overflow-hidden">
+                    {(currentUser?.avatar || currentUser?.profileImage) ? (
+                      <img src={currentUser.avatar || currentUser.profileImage} alt="" className="w-full h-full object-cover rounded-full" />
+                    ) : avatarLetter}
                   </div>
-                )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-xs text-on-surface truncate">{currentUser?.name || 'Account'}</span>
+                      <span className={`px-2 py-0.2 rounded-full text-[10px] font-extrabold uppercase ${
+                        currentUser?.role === 'admin' ? 'bg-secondary text-on-secondary' : 'bg-secondary-fixed text-on-secondary-fixed'
+                      }`}>
+                        {currentUser?.role === 'admin' ? 'Admin' : 'Student'}
+                      </span>
+                    </div>
+                    {currentUser?.email && (
+                      <div className="text-[11px] text-on-surface-variant truncate mt-0.5">
+                        {currentUser.email}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-1 text-xs">

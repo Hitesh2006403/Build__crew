@@ -37,26 +37,113 @@ try {
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
+// Dynamic CORS configuration allowing deployed frontend, preview deployments, and localhost
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.APP_URL,
+  "http://localhost:5173",
+  "http://localhost:3000",
+  "http://localhost:5000",
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.length === 0 ||
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app") ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("https://localhost:")
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  })
+);
+
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 
 // ---------------------------------------------------------------------------
+// 🔌 MongoDB Connection Helper (Cached for Serverless & Standalone)
+// ---------------------------------------------------------------------------
+let isConnecting = null;
+
+export const connectDB = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+  if (!isConnecting) {
+    const mongoURI = (process.env.MONGODB_URI || "").trim();
+    if (!mongoURI) {
+      console.error("MONGODB_URI is not set in environment variables!");
+      throw new Error("MONGODB_URI is not set in environment variables");
+    }
+    isConnecting = mongoose
+      .connect(mongoURI)
+      .then(async () => {
+        console.log("Connected to MongoDB Atlas");
+        try {
+          await seedFounderAdmins();
+        } catch (seedErr) {
+          console.warn("Founder admin seed warning:", seedErr.message);
+        }
+      })
+      .catch((err) => {
+        isConnecting = null;
+        console.error("MongoDB connection error:", err.message);
+        throw err;
+      });
+  }
+  await isConnecting;
+};
+
+// Database connection middleware: ensures DB is connected before handling any route
+app.use(async (req, res, next) => {
+  if (req.path === "/" || req.path === "/health" || req.path === "/api/health") {
+    return next();
+  }
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    return res.status(503).json({
+      error: "Database is unavailable. Please check MONGODB_URI configuration.",
+      details: process.env.NODE_ENV === "production" ? undefined : err.message,
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // 🩺 Health check endpoint
 // ---------------------------------------------------------------------------
-app.get("/", (req, res) => {
+const healthHandler = (req, res) => {
   res.json({
     status: "online",
     message: "BuildCrew MERN Backend API is running.",
     database: mongoose.connection.readyState === 1 ? "Connected to MongoDB" : "Disconnected",
   });
-});
+};
+
+app.get("/", healthHandler);
+app.get("/health", healthHandler);
 
 // ---------------------------------------------------------------------------
-// 📦 Bootstrap Route - Hydrates initial platform state directly from MongoDB
+// 🚀 REST API Modular Routes
 // ---------------------------------------------------------------------------
-app.get("/api/bootstrap", optionalAuth, async (req, res) => {
+const apiRouter = express.Router();
+apiRouter.get("/health", healthHandler);
+apiRouter.get("/", healthHandler);
+
+// 📦 Bootstrap Route - Hydrates initial platform state directly from MongoDB
+apiRouter.get("/bootstrap", optionalAuth, async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
       return res.json({
@@ -76,13 +163,13 @@ app.get("/api/bootstrap", optionalAuth, async (req, res) => {
 
     const [projects, hackathons, builders, hackathonSquads] = await Promise.all([
       Project.find()
-        .populate("createdBy", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
-        .populate("members", "name email avatar college university role roleTitle github linkedin showEmailToTeam")
+        .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+        .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
         .sort({ createdAt: -1 })
         .lean(),
       Hackathon.find(hackathonQuery).sort({ createdAt: -1 }).lean(),
       User.find().select("-password").sort({ createdAt: -1 }).lean(),
-      HackathonTeam.find().populate("createdBy", "name email avatar").sort({ createdAt: -1 }).lean(),
+      HackathonTeam.find().populate("createdBy", "name email avatar profileImage").sort({ createdAt: -1 }).lean(),
     ]);
 
     return res.json({
@@ -101,22 +188,18 @@ app.get("/api/bootstrap", optionalAuth, async (req, res) => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// 🚀 REST API Modular Routes
-// ---------------------------------------------------------------------------
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-app.use("/api/projects", projectRoutes);
-app.use("/api/applications", applicationRoutes);
-app.use("/api/teams", teamRoutes);
-app.use("/api/invitations", invitationRoutes);
-app.use("/api/notifications", notificationRoutes);
-app.use("/api/hackathons", hackathonRoutes);
+// Modular sub-routes
+apiRouter.use("/auth", authRoutes);
+apiRouter.use("/users", userRoutes);
+apiRouter.use("/projects", projectRoutes);
+apiRouter.use("/applications", applicationRoutes);
+apiRouter.use("/teams", teamRoutes);
+apiRouter.use("/invitations", invitationRoutes);
+apiRouter.use("/notifications", notificationRoutes);
+apiRouter.use("/hackathons", hackathonRoutes);
 
-// ---------------------------------------------------------------------------
 // 👥 Builders & Squads Endpoints (Synced with MongoDB)
-// ---------------------------------------------------------------------------
-app.get("/api/builders", async (req, res) => {
+apiRouter.get("/builders", async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) return res.json([]);
     const builders = await User.find().select("-password").sort({ createdAt: -1 });
@@ -126,7 +209,7 @@ app.get("/api/builders", async (req, res) => {
   }
 });
 
-app.post("/api/builders", async (req, res) => {
+apiRouter.post("/builders", async (req, res) => {
   try {
     const { name, role, university, year, skills, avatar, lookingFor } = req.body;
     const cleanEmail = `builder-${Date.now()}@buildcrew.local`;
@@ -150,19 +233,23 @@ app.post("/api/builders", async (req, res) => {
   }
 });
 
-app.get("/api/squad-wins", (req, res) => {
+apiRouter.get("/squad-wins", (req, res) => {
   res.json([]);
 });
 
-app.get("/api/hackathon-squads", async (req, res) => {
+apiRouter.get("/hackathon-squads", async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) return res.json([]);
-    const squads = await HackathonTeam.find().populate("createdBy", "name email avatar").sort({ createdAt: -1 });
+    const squads = await HackathonTeam.find().populate("createdBy", "name email avatar profileImage").sort({ createdAt: -1 });
     res.json(squads);
   } catch (err) {
     res.status(500).json({ error: "Failed to fetch hackathon squads from MongoDB." });
   }
 });
+
+// Mount routes at both /api and root (for environments/rewrites with or without /api prefix)
+app.use("/api", apiRouter);
+app.use(apiRouter);
 
 // 404 Route handler
 app.use((req, res) => {
@@ -176,24 +263,18 @@ app.use((err, req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
-// 🔌 MongoDB Connection & Server Initialization
+// 🔌 Standalone Server Initialization (Local Development)
 // ---------------------------------------------------------------------------
-const mongoURI = (process.env.MONGODB_URI || "").trim();
-
-if (!mongoURI) {
-  console.error("MONGODB_URI is not set in backend/.env!");
-  process.exit(1);
+if (!process.env.VERCEL) {
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`server is running on port ${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error("MongoDB initial connection error:", err.message);
+    });
 }
 
-mongoose
-  .connect(mongoURI)
-  .then(async () => {
-    await seedFounderAdmins();
-    app.listen(PORT, () => {
-      console.log(`server is running on port ${PORT}`);
-      console.log("Connected to MongoDB");
-    });
-  })
-  .catch((err) => {
-    console.error("MongoDB connection error:", err.message);
-  });
+export default app;

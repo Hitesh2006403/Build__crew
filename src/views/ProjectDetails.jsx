@@ -31,10 +31,11 @@ export default function ProjectDetails({
 
   // Real Creator information from MongoDB
   const creatorObj = typeof project.createdBy === 'object' && project.createdBy !== null ? project.createdBy : null;
-  const creatorId = creatorObj?._id || project.createdBy;
-  const creatorName = creatorObj?.name || project.lead?.name || '';
-  const creatorCollege = cleanText(creatorObj?.college || creatorObj?.university || project.lead?.university);
-  const creatorAvatar = creatorObj?.avatar || creatorObj?.profileImage || project.lead?.avatar || '';
+  const creatorId = creatorObj?._id || creatorObj?.id || project.createdBy;
+  const isCreatorCurrentUser = currentUser?._id && String(creatorId) === String(currentUser._id);
+  const creatorName = (isCreatorCurrentUser ? currentUser.name : (creatorObj?.name || project.lead?.name)) || '';
+  const creatorCollege = cleanText((isCreatorCurrentUser ? (currentUser.college || currentUser.university) : null) || creatorObj?.college || creatorObj?.university || project.lead?.university);
+  const creatorAvatar = (isCreatorCurrentUser ? (currentUser.avatar || currentUser.profileImage) : null) || creatorObj?.avatar || creatorObj?.profileImage || project.lead?.avatar || '';
   const creatorRole = cleanText(
     (creatorObj?.roleTitle !== 'Lead Architect' ? creatorObj?.roleTitle : '') || 
     (creatorObj?.role !== 'student' && creatorObj?.role !== 'admin' ? creatorObj?.role : '')
@@ -99,11 +100,14 @@ export default function ProjectDetails({
       return;
     }
 
+    const isMemberCurrentUser = currentUser?._id && String(mId) === String(currentUser._id);
+    const memberAvatar = (isMemberCurrentUser ? (currentUser.avatar || currentUser.profileImage) : null) || (isObj ? (m.avatar || m.profileImage) : '') || '';
+
     memberMap.set(idStr, {
       userId: mId,
-      name: isObj ? (m.name || 'Student Builder') : 'Student Builder',
+      name: isMemberCurrentUser ? (currentUser.name || 'Student Builder') : (isObj ? (m.name || 'Student Builder') : 'Student Builder'),
       college: isObj ? cleanText(m.college || m.university) : '',
-      avatar: isObj ? (m.avatar || m.profileImage || '') : '',
+      avatar: memberAvatar,
       role: isObj ? cleanText(m.roleTitle !== 'Lead Architect' ? m.roleTitle : '') : '',
       email: isObj ? (m.email || '') : '',
       github: isObj ? (m.github || '') : '',

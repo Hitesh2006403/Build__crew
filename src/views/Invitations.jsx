@@ -43,9 +43,10 @@ export default function Invitations({
 
   const handleOpenContact = (person) => {
     if (!person) return;
+    const isPersonSelf = currentUser && String(person._id || person.id) === String(currentUser._id);
     setContactMember({
-      name: person.name || 'Teammate',
-      avatar: person.avatar || person.profileImage || '',
+      name: (isPersonSelf ? currentUser.name : person.name) || 'Teammate',
+      avatar: (isPersonSelf ? (currentUser.avatar || currentUser.profileImage) : null) || person.avatar || person.profileImage || '',
       college: cleanText(person.college || person.university),
       email: person.email || '',
       github: person.github || '',
@@ -205,9 +206,10 @@ export default function Invitations({
             <div className="space-y-space-md">
               {receivedInvitations.map((inv) => {
                 const sender = typeof inv.sender === 'object' && inv.sender !== null ? inv.sender : {};
-                const senderName = sender.name || 'Student Builder';
-                const senderCollege = cleanText(sender.college || sender.university);
-                const senderAvatar = sender.avatar || sender.profileImage || '';
+                const isSenderSelf = currentUser && String(sender._id || sender.id || inv.sender) === String(currentUser._id);
+                const senderName = (isSenderSelf ? currentUser.name : sender.name) || 'Student Builder';
+                const senderCollege = cleanText((isSenderSelf ? (currentUser.college || currentUser.university) : null) || sender.college || sender.university);
+                const senderAvatar = (isSenderSelf ? (currentUser.avatar || currentUser.profileImage) : null) || sender.avatar || sender.profileImage || '';
                 const teamTitle = inv.teamName || inv.project?.title || inv.hackathonTeam?.teamName || 'Squad';
                 const projectTitle = inv.project?.title;
                 const hackathonTitle = inv.hackathonTeam?.hackathonTitle || inv.hackathonTeam?.teamName;
@@ -361,9 +363,10 @@ export default function Invitations({
             <div className="space-y-space-md">
               {sentInvitations.map((inv) => {
                 const receiver = typeof inv.receiver === 'object' && inv.receiver !== null ? inv.receiver : {};
-                const receiverName = receiver.name || 'Invited Teammate';
-                const receiverCollege = cleanText(receiver.college || receiver.university);
-                const receiverAvatar = receiver.avatar || receiver.profileImage || '';
+                const isReceiverSelf = currentUser && String(receiver._id || receiver.id || inv.receiver) === String(currentUser._id);
+                const receiverName = (isReceiverSelf ? currentUser.name : receiver.name) || 'Invited Teammate';
+                const receiverCollege = cleanText((isReceiverSelf ? (currentUser.college || currentUser.university) : null) || receiver.college || receiver.university);
+                const receiverAvatar = (isReceiverSelf ? (currentUser.avatar || currentUser.profileImage) : null) || receiver.avatar || receiver.profileImage || '';
                 const teamTitle = inv.teamName || inv.project?.title || inv.hackathonTeam?.teamName || 'Squad';
                 const projectTitle = inv.project?.title;
                 const hackathonTitle = inv.hackathonTeam?.hackathonTitle || inv.hackathonTeam?.teamName;
