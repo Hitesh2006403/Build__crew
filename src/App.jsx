@@ -1054,7 +1054,7 @@ export default function App() {
       />
 
       {/* Main Content Area (Mobile: pl-0, Desktop: pl-72) */}
-      <div className="pl-0 lg:pl-72 min-h-screen flex flex-col w-full">
+      <div className="pl-0 lg:pl-72 flex flex-col flex-1 w-full min-w-0">
         {/* Sticky Top Header */}
         <Header
           activeView={activeView}
@@ -1086,7 +1086,7 @@ export default function App() {
         />
 
         {/* Dynamic View Router */}
-        <main className="w-full pt-16 bg-surface min-h-screen px-3 sm:px-4 lg:px-space-lg py-4 sm:py-space-lg pb-24 lg:pb-space-lg flex-1">
+        <main className="w-full pt-16 bg-surface px-3 sm:px-4 lg:px-space-lg py-4 sm:py-space-lg pb-24 lg:pb-space-lg flex-1">
           <Routes>
             {/* Student Platform Routes */}
             <Route path="/dashboard" element={
