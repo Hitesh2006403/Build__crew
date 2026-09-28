@@ -1,3 +1,195 @@
+// Helper: Check if an admin has uploaded a custom image (excluding repeated/stock Google placeholders)
+function getUploadedImage(hackathon) {
+  if (!hackathon) return null;
+  const candidates = [
+    hackathon.image,
+    hackathon.coverImage,
+    hackathon.heroImage,
+    hackathon.banner,
+    hackathon.logo,
+  ];
+
+  for (const img of candidates) {
+    if (typeof img === 'string' && img.trim()) {
+      const trimmed = img.trim();
+      // Base64 upload from admin
+      if (trimmed.startsWith('data:image/')) return trimmed;
+      // Filter out repeated Google AIDA default images
+      if (trimmed.includes('lh3.googleusercontent.com/aida-public')) continue;
+      if (trimmed.includes('aida-public/AB6AXu')) continue;
+      // Real custom uploaded / hosted image URL
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+      }
+    }
+  }
+  return null;
+}
+
+// 8 Distinct Curated Abstract Themes for dynamic visual treatment
+const ABSTRACT_THEMES = [
+  {
+    id: 'indigo-flux',
+    bg: 'from-slate-950 via-indigo-950 to-slate-900',
+    border: 'border-indigo-500/30',
+    glow: 'bg-indigo-500/20',
+    glow2: 'bg-blue-400/15',
+    badgeBg: 'bg-indigo-500/25 text-indigo-200 border-indigo-400/30',
+    icon: 'terminal',
+    pattern: 'circuit',
+  },
+  {
+    id: 'emerald-matrix',
+    bg: 'from-slate-950 via-teal-950 to-emerald-950',
+    border: 'border-emerald-500/30',
+    glow: 'bg-emerald-500/20',
+    glow2: 'bg-teal-400/15',
+    badgeBg: 'bg-emerald-500/25 text-emerald-200 border-emerald-400/30',
+    icon: 'psychology',
+    pattern: 'dots',
+  },
+  {
+    id: 'cosmic-purple',
+    bg: 'from-slate-950 via-purple-950 to-fuchsia-950',
+    border: 'border-purple-500/30',
+    glow: 'bg-purple-500/20',
+    glow2: 'bg-fuchsia-400/15',
+    badgeBg: 'bg-purple-500/25 text-purple-200 border-purple-400/30',
+    icon: 'rocket_launch',
+    pattern: 'rings',
+  },
+  {
+    id: 'sunset-amber',
+    bg: 'from-stone-950 via-stone-900 to-amber-950',
+    border: 'border-amber-500/30',
+    glow: 'bg-amber-500/20',
+    glow2: 'bg-orange-500/15',
+    badgeBg: 'bg-amber-500/25 text-amber-200 border-amber-400/30',
+    icon: 'bolt',
+    pattern: 'diagonal',
+  },
+  {
+    id: 'ocean-cyan',
+    bg: 'from-slate-950 via-sky-950 to-blue-950',
+    border: 'border-cyan-500/30',
+    glow: 'bg-cyan-500/20',
+    glow2: 'bg-blue-500/15',
+    badgeBg: 'bg-cyan-500/25 text-cyan-200 border-cyan-400/30',
+    icon: 'language',
+    pattern: 'grid',
+  },
+  {
+    id: 'crimson-ruby',
+    bg: 'from-neutral-950 via-rose-950 to-slate-950',
+    border: 'border-rose-500/30',
+    glow: 'bg-rose-500/20',
+    glow2: 'bg-red-400/15',
+    badgeBg: 'bg-rose-500/25 text-rose-200 border-rose-400/30',
+    icon: 'memory',
+    pattern: 'circuit',
+  },
+  {
+    id: 'dark-obsidian',
+    bg: 'from-zinc-950 via-slate-900 to-zinc-900',
+    border: 'border-slate-500/30',
+    glow: 'bg-blue-400/15',
+    glow2: 'bg-indigo-500/15',
+    badgeBg: 'bg-white/15 text-slate-200 border-white/20',
+    icon: 'code',
+    pattern: 'dots',
+  },
+  {
+    id: 'violet-aurora',
+    bg: 'from-slate-950 via-violet-950 to-indigo-900',
+    border: 'border-violet-500/30',
+    glow: 'bg-violet-500/20',
+    glow2: 'bg-indigo-400/15',
+    badgeBg: 'bg-violet-500/25 text-violet-200 border-violet-400/30',
+    icon: 'hub',
+    pattern: 'rings',
+  },
+];
+
+// Compute deterministic theme from hackathon identity
+function getHackathonTheme(hackathon) {
+  const seedStr = String(hackathon._id || hackathon.id || hackathon.title || 'hackathon');
+  let hash = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    hash = (hash << 5) - hash + seedStr.charCodeAt(i);
+    hash |= 0;
+  }
+  const index = Math.abs(hash) % ABSTRACT_THEMES.length;
+  return ABSTRACT_THEMES[index];
+}
+
+// Extract top 1 or 2 tracks/categories
+function getTopTracks(hackathon) {
+  const rawList = Array.isArray(hackathon.trackLabels) && hackathon.trackLabels.length > 0
+    ? hackathon.trackLabels
+    : Array.isArray(hackathon.tracks) && hackathon.tracks.length > 0
+      ? hackathon.tracks
+      : [];
+  return rawList
+    .map(t => typeof t === 'string' ? t.trim() : '')
+    .filter(Boolean)
+    .slice(0, 2);
+}
+
+// Select matching Category icon
+function getCategoryIcon(hackathon, defaultIcon) {
+  const text = `${hackathon.title || ''} ${(hackathon.trackLabels || []).join(' ')} ${(hackathon.tracks || []).join(' ')}`.toLowerCase();
+  if (text.includes('ai') || text.includes('machine learning') || text.includes('neural')) return 'psychology';
+  if (text.includes('web') || text.includes('fullstack') || text.includes('frontend')) return 'language';
+  if (text.includes('cyber') || text.includes('security') || text.includes('bug')) return 'security';
+  if (text.includes('mobile') || text.includes('android') || text.includes('ios')) return 'smartphone';
+  if (text.includes('iot') || text.includes('hardware') || text.includes('robot')) return 'memory';
+  if (text.includes('cloud') || text.includes('devops') || text.includes('scale')) return 'cloud';
+  if (text.includes('data') || text.includes('analytics')) return 'analytics';
+  if (text.includes('game') || text.includes('gaming')) return 'sports_esports';
+  if (text.includes('health') || text.includes('bio')) return 'cardiology';
+  return defaultIcon || 'terminal';
+}
+
+// Clean abstract SVG background patterns
+function AbstractPattern({ pattern }) {
+  if (pattern === 'circuit') {
+    return (
+      <svg className="absolute inset-0 w-full h-full opacity-15 pointer-events-none" viewBox="0 0 400 200" fill="none" stroke="currentColor">
+        <path d="M-20 40 H120 L150 70 H300 L330 40 H450" strokeWidth="1.5" strokeDasharray="4 4" />
+        <path d="M0 160 H80 L110 130 H240 L270 160 H420" strokeWidth="1.5" />
+        <circle cx="150" cy="70" r="3.5" fill="currentColor" />
+        <circle cx="270" cy="160" r="3.5" fill="currentColor" />
+        <circle cx="80" cy="160" r="2.5" fill="currentColor" />
+        <circle cx="300" cy="70" r="2.5" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (pattern === 'dots') {
+    return (
+      <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#ffffff_1.5px,transparent_1.5px)] [background-size:16px_16px]" />
+    );
+  }
+  if (pattern === 'rings') {
+    return (
+      <svg className="absolute -top-10 -right-10 w-60 h-60 opacity-20 pointer-events-none" viewBox="0 0 200 200" fill="none" stroke="currentColor">
+        <circle cx="100" cy="100" r="35" strokeWidth="1" strokeDasharray="3 3" />
+        <circle cx="100" cy="100" r="60" strokeWidth="1.2" />
+        <circle cx="100" cy="100" r="85" strokeWidth="1" strokeDasharray="6 4" />
+        <circle cx="100" cy="100" r="110" strokeWidth="1.5" />
+      </svg>
+    );
+  }
+  if (pattern === 'grid') {
+    return (
+      <div className="absolute inset-0 opacity-10 pointer-events-none bg-[linear-gradient(to_right,#ffffff15_1px,transparent_1px),linear-gradient(to_bottom,#ffffff15_1px,transparent_1px)] bg-[size:24px_24px]" />
+    );
+  }
+  // diagonal pattern
+  return (
+    <div className="absolute inset-0 opacity-10 pointer-events-none bg-[repeating-linear-gradient(45deg,#ffffff,#ffffff_1px,transparent_1px,transparent_14px)]" />
+  );
+}
+
 export default function HackathonCard({
   hackathon,
   viewMode = 'grid',
@@ -9,11 +201,17 @@ export default function HackathonCard({
   const isUpcoming = hackathon.status === 'upcoming';
   const isTeamFull = hackathon.status === 'team-full';
 
+  // Extract visual data
+  const uploadedImage = getUploadedImage(hackathon);
+  const theme = getHackathonTheme(hackathon);
+  const topTracks = getTopTracks(hackathon);
+  const categoryIcon = getCategoryIcon(hackathon, theme.icon);
+
   // Status Badge Configuration
   const getStatusBadge = () => {
     if (isClosingSoon) {
       return (
-        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-xs">
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-xs shrink-0">
           <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
           <span>{hackathon.statusLabel || 'Closing soon'}</span>
         </span>
@@ -21,7 +219,7 @@ export default function HackathonCard({
     }
     if (isTeamFull) {
       return (
-        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-purple-100 text-purple-900 border border-purple-300 flex items-center gap-1.5">
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-purple-100 text-purple-900 border border-purple-300 flex items-center gap-1.5 shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-purple-600"></span>
           <span>{hackathon.statusLabel || 'Team full'}</span>
         </span>
@@ -29,7 +227,7 @@ export default function HackathonCard({
     }
     if (isUpcoming) {
       return (
-        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-100 text-blue-900 border border-blue-300 flex items-center gap-1.5">
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-blue-100 text-blue-900 border border-blue-300 flex items-center gap-1.5 shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
           <span>{hackathon.statusLabel || 'Upcoming'}</span>
         </span>
@@ -37,7 +235,7 @@ export default function HackathonCard({
     }
     if (isConcluded) {
       return (
-        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-surface-container text-on-surface-variant border border-surface-container-high flex items-center gap-1.5">
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-surface-container text-on-surface-variant border border-surface-container-high flex items-center gap-1.5 shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-outline"></span>
           <span>{hackathon.statusLabel || 'Registration closed'}</span>
         </span>
@@ -45,7 +243,7 @@ export default function HackathonCard({
     }
     // Default: Registration open
     return (
-      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1.5 shadow-xs">
+      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300 flex items-center gap-1.5 shadow-xs shrink-0">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
         <span>{hackathon.statusLabel || 'Registration open'}</span>
       </span>
@@ -66,11 +264,15 @@ export default function HackathonCard({
       >
         {/* Left: Branding & Circuit Badge */}
         <div className="flex items-center gap-3.5 min-w-[260px]">
-          <div className={`w-12 h-12 rounded-2xl bg-surface-container-low p-2 flex items-center justify-center shrink-0 border border-surface-container-high overflow-hidden shadow-xs ${isConcluded ? 'grayscale opacity-75' : ''}`}>
-            {hackathon.logo ? (
-              <img src={hackathon.logo} alt={hackathon.title} className="w-full h-full object-contain rounded-lg" />
+          <div className={`w-12 h-12 rounded-2xl p-1 flex items-center justify-center shrink-0 border border-surface-container-high overflow-hidden shadow-xs ${
+            uploadedImage ? 'bg-surface-container-low' : `bg-gradient-to-br ${theme.bg} text-white`
+          } ${isConcluded ? 'grayscale opacity-75' : ''}`}>
+            {uploadedImage ? (
+              <img src={uploadedImage} alt={hackathon.title} className="w-full h-full object-cover rounded-xl" />
             ) : (
-              <span className="material-symbols-outlined text-2xl text-secondary">terminal</span>
+              <span className="material-symbols-outlined text-2xl">
+                {categoryIcon}
+              </span>
             )}
           </div>
           <div>
@@ -157,43 +359,144 @@ export default function HackathonCard({
       }`}
     >
       <div>
-        {/* Top Header Tag Strip */}
-        <div className="flex items-center justify-between gap-2 mb-3.5">
-          <div className="flex items-center gap-1.5">
-            <span className="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-[11px] font-extrabold tracking-wide uppercase flex items-center gap-1 border border-secondary/20">
-              <span className="material-symbols-outlined text-xs">verified</span>
-              <span>{hackathon.circuitId || 'CIRCUIT EVENT'}</span>
-            </span>
-            <span className="px-2.5 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px] font-semibold capitalize">
-              {hackathon.mode}
-            </span>
-          </div>
+        {/* Visual / Header Area: Dynamic Title Card OR Uploaded Image */}
+        {uploadedImage ? (
+          <div 
+            onClick={() => onSelect(hackathon)}
+            className="group/img relative w-full h-52 sm:h-56 rounded-2xl overflow-hidden mb-4 border border-surface-container-high/80 group-hover:border-secondary/40 shadow-xs transition-all duration-300 cursor-pointer flex flex-col justify-between p-4"
+          >
+            <img 
+              src={uploadedImage} 
+              alt={hackathon.title} 
+              className="absolute inset-0 w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500" 
+            />
+            {/* Scrim overlay for crisp readability */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/95 via-slate-950/60 to-slate-950/40" />
 
-          {getStatusBadge()}
-        </div>
+            {/* Top row: Circuit / Mode & Status Badge */}
+            <div className="relative z-10 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full bg-black/60 text-white text-[11px] font-extrabold uppercase tracking-wide border border-white/20 backdrop-blur-md flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs text-amber-300">verified</span>
+                  <span>{hackathon.circuitId || 'CIRCUIT'}</span>
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-semibold border border-white/20 backdrop-blur-md capitalize">
+                  {hackathon.mode || 'Hybrid'}
+                </span>
+              </div>
+              {getStatusBadge()}
+            </div>
 
-        {/* Branding & Title Row (What is the hackathon?) */}
-        <div className="flex items-start gap-3.5 mb-3">
-          <div className={`w-13 h-13 rounded-2xl bg-surface-container-low p-2 flex items-center justify-center shrink-0 border border-surface-container-high shadow-xs group-hover:scale-105 transition-transform ${isConcluded ? 'grayscale opacity-75' : ''}`}>
-            {hackathon.logo ? (
-              <img src={hackathon.logo} alt={hackathon.title} className="w-full h-full object-contain rounded-lg" />
-            ) : (
-              <span className="material-symbols-outlined text-3xl text-secondary">terminal</span>
-            )}
+            {/* Bottom: Tracks, Title, Organizer & Date */}
+            <div className="relative z-10 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                {topTracks.length > 0 && (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {topTracks.map((tr, idx) => (
+                      <span key={idx} className="px-2 py-0.5 rounded-md bg-white/20 text-white text-[10px] font-bold uppercase tracking-wider border border-white/25 backdrop-blur-xs">
+                        {tr}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-black/70 px-2 py-0.5 rounded-md border border-white/15 ml-auto">
+                  <span className="material-symbols-outlined text-xs">event</span>
+                  <span className="truncate">{hackathon.dates || 'Upcoming 2026'}</span>
+                </div>
+              </div>
+
+              <h3 
+                className="text-lg sm:text-xl font-black text-white tracking-tight leading-snug drop-shadow-sm group-hover:text-blue-200 transition-colors line-clamp-2"
+                title={hackathon.title}
+              >
+                {hackathon.title}
+              </h3>
+
+              <p className="text-xs font-semibold text-slate-300 truncate flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px] text-slate-400">account_balance</span>
+                <span>{orgName}</span>
+              </p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 
-              onClick={() => onSelect(hackathon)}
-              className="text-lg font-black text-on-surface tracking-tight group-hover:text-secondary transition-colors cursor-pointer truncate"
-              title={hackathon.title}
-            >
-              {hackathon.title}
-            </h3>
-            <p className="text-xs text-on-surface-variant font-medium truncate mt-0.5">
-              Organized by {orgName}
-            </p>
+        ) : (
+          /* Dynamic Hackathon Title Card with clean abstract visual treatment */
+          <div 
+            onClick={() => onSelect(hackathon)}
+            className={`relative w-full min-h-[195px] sm:min-h-[205px] rounded-2xl overflow-hidden mb-4 p-4 sm:p-4.5 bg-gradient-to-br ${theme.bg} text-white border ${theme.border} shadow-sm group-hover:shadow-md group-hover:border-secondary/50 transition-all duration-300 cursor-pointer flex flex-col justify-between`}
+          >
+            {/* Ambient decorative glowing light orbs */}
+            <div className={`absolute -top-12 -right-12 w-44 h-44 rounded-full ${theme.glow} blur-3xl pointer-events-none`} />
+            <div className={`absolute -bottom-10 -left-10 w-36 h-36 rounded-full ${theme.glow2} blur-2xl pointer-events-none`} />
+
+            {/* Abstract visual background pattern */}
+            <AbstractPattern pattern={theme.pattern} />
+
+            {/* Top row: Circuit ID, Mode & Status Badge */}
+            <div className="relative z-10 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white text-[11px] font-extrabold uppercase tracking-wide border border-white/15 backdrop-blur-md flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs text-amber-300">verified</span>
+                  <span>{hackathon.circuitId || 'CIRCUIT'}</span>
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white text-[11px] font-semibold border border-white/15 backdrop-blur-md capitalize flex items-center gap-1">
+                  <span className="material-symbols-outlined text-xs">
+                    {hackathon.mode?.toLowerCase() === 'online' ? 'wifi' : hackathon.mode?.toLowerCase() === 'offline' ? 'location_on' : 'devices'}
+                  </span>
+                  <span>{hackathon.mode || 'Hybrid'}</span>
+                </span>
+              </div>
+              {getStatusBadge()}
+            </div>
+
+            {/* Middle: Prominent Hackathon Title & Organizer */}
+            <div className="relative z-10 my-2.5">
+              <div className="flex items-start gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/20 backdrop-blur-md flex items-center justify-center shrink-0 shadow-xs mt-0.5">
+                  <span className="material-symbols-outlined text-lg text-white">
+                    {categoryIcon}
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 
+                    className="text-lg sm:text-xl font-black text-white tracking-tight leading-snug drop-shadow-xs group-hover:text-blue-100 transition-colors line-clamp-2"
+                    title={hackathon.title}
+                  >
+                    {hackathon.title}
+                  </h3>
+                  <p className="text-xs font-medium text-slate-300/90 truncate flex items-center gap-1 mt-0.5">
+                    <span className="material-symbols-outlined text-[13px] text-slate-400">account_balance</span>
+                    <span>{orgName}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom row: Tracks (1 or 2) & Event Date */}
+            <div className="relative z-10 flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-white/10">
+              <div className="flex items-center gap-1 flex-wrap">
+                {topTracks.length > 0 ? (
+                  topTracks.map((tr, idx) => (
+                    <span 
+                      key={idx} 
+                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border backdrop-blur-xs ${theme.badgeBg}`}
+                    >
+                      {tr}
+                    </span>
+                  ))
+                ) : (
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border backdrop-blur-xs ${theme.badgeBg}`}>
+                    General Sprint
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 text-[11px] font-bold text-amber-200 bg-white/10 px-2.5 py-0.5 rounded-md border border-white/15 backdrop-blur-xs ml-auto">
+                <span className="material-symbols-outlined text-xs text-amber-300">event</span>
+                <span className="truncate">{hackathon.dates || 'Upcoming 2026'}</span>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Description snippet */}
         {hackathon.description && (
