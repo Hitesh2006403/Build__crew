@@ -1086,7 +1086,7 @@ export default function App() {
         />
 
         {/* Dynamic View Router */}
-        <main className="w-full pt-16 bg-surface px-3 sm:px-4 lg:px-space-lg py-4 sm:py-space-lg pb-24 lg:pb-space-lg flex-1">
+        <main className="w-full pt-16 lg:pt-[88px] bg-surface px-3 sm:px-4 lg:px-space-lg py-4 sm:py-space-lg pb-24 lg:pb-space-lg flex-1 desktop-content-container">
           <Routes>
             {/* Student Platform Routes */}
             <Route path="/dashboard" element={

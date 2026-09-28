@@ -112,3 +112,11 @@
 .animate-splash {
   animation: splashFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Desktop header spacing: fixed top header is h-16 (64px), so desktop main content starts 24px (space-lg) below it */
+@media (min-width: 1024px) {
+  .desktop-content-container {
+    padding-top: 88px !important;
+  }
+}
+
