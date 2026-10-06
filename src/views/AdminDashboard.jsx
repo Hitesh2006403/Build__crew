@@ -127,6 +127,7 @@ export default function AdminDashboard({
   const [hackToDelete, setHackToDelete] = useState(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [previewHackathon, setPreviewHackathon] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // File input ref for cover image upload
   const fileInputRef = useRef(null);
@@ -260,6 +261,33 @@ export default function AdminDashboard({
       setFormData(prev => ({ ...prev, image: event.target?.result }));
     };
     reader.readAsDataURL(file);
+  };
+
+  // Automated Karnataka Hackathons Sync Trigger
+  const handleSyncKarnataka = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await hackathonsApi.syncKarnatakaHackathons();
+      if (res?.success) {
+        const ins = res.stats?.inserted || 0;
+        const upd = res.stats?.updated || 0;
+        showToast?.(`Karnataka hackathons synced! ${ins} added, ${upd} updated.`);
+        if (onRefreshHackathons) {
+          await onRefreshHackathons();
+        } else {
+          const fresh = await hackathonsApi.getHackathons();
+          onUpdateHackathons(fresh);
+        }
+      } else {
+        showToast?.('Karnataka hackathon sync completed.');
+        if (onRefreshHackathons) await onRefreshHackathons();
+      }
+    } catch (err) {
+      console.error('Failed to sync Karnataka hackathons:', err);
+      showToast?.(`Sync failed: ${err.message || 'Network error'}`);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Open Form to Add New Hackathon
@@ -766,6 +794,19 @@ export default function AdminDashboard({
           <div className="flex items-center gap-2.5">
             {adminActiveTab === 'hackathons' ? (
               <>
+                <button
+                  type="button"
+                  onClick={handleSyncKarnataka}
+                  disabled={isSyncing}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-secondary-container/40 hover:bg-secondary-container/70 text-secondary border border-secondary/40 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+                  title="Automatically fetch live hackathons conducting presently across Karnataka"
+                >
+                  <span className={`material-symbols-outlined text-sm ${isSyncing ? 'animate-spin' : ''}`}>
+                    {isSyncing ? 'sync' : 'cloud_download'}
+                  </span>
+                  <span>{isSyncing ? 'Syncing Karnataka...' : 'Auto-Sync Karnataka'}</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setIsResetConfirmOpen(true)}

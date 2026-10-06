@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import Hackathon from "../models/Hackathon.js";
 import HackathonTeam from "../models/HackathonTeam.js";
 import { authenticateUser, requireAdmin, optionalAuth } from "../middleware/auth.js";
+import { runHackathonIngestion } from "../services/ingestion/syncService.js";
 
 const router = express.Router();
 
@@ -21,6 +22,39 @@ router.get("/", optionalAuth, async (req, res) => {
   } catch (err) {
     console.error("Fetch hackathons error:", err);
     return res.status(500).json({ error: "Could not retrieve hackathons.", details: err.message });
+  }
+});
+
+// POST /api/hackathons/sync-karnataka - Trigger automated ingestion of Karnataka hackathons
+router.post("/sync-karnataka", async (req, res) => {
+  try {
+    const syncSecret = process.env.SYNC_SECRET || "buildcrew_sync_secret_2026";
+    const headerSecret = req.headers["x-sync-key"];
+
+    // Allow if secret key matches (for automated cron / GitHub Actions / webhooks)
+    if (headerSecret && headerSecret === syncSecret) {
+      const stats = await runHackathonIngestion();
+      return res.json({
+        success: true,
+        message: "Karnataka hackathon automated sync completed.",
+        stats,
+      });
+    }
+
+    // Otherwise require authenticated admin
+    return authenticateUser(req, res, () => {
+      requireAdmin(req, res, async () => {
+        const stats = await runHackathonIngestion();
+        return res.json({
+          success: true,
+          message: "Karnataka hackathon automated sync completed.",
+          stats,
+        });
+      });
+    });
+  } catch (err) {
+    console.error("Sync Karnataka hackathons error:", err);
+    return res.status(500).json({ error: "Failed to sync Karnataka hackathons.", details: err.message });
   }
 });
 

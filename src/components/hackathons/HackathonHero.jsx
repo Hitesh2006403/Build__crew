@@ -84,14 +84,14 @@ export default function HackathonHero({ flagship, onFindSquad, onOpenDetails }) 
               <span>Build a Team</span>
             </button>
 
-            {flagship.officialRegistrationLink && (
+            {(flagship.officialRegistrationLink || flagship.registrationLink || flagship.officialWebsite) && (
               <a
-                href={flagship.officialRegistrationLink}
+                href={flagship.officialRegistrationLink || flagship.registrationLink || flagship.officialWebsite}
                 target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/15 backdrop-blur-md active:scale-[0.98] transition-all"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md border border-emerald-400/40 backdrop-blur-md active:scale-[0.98] transition-all"
               >
-                <span>Official Registration</span>
+                <span>Register on Official Site</span>
                 <span className="material-symbols-outlined text-sm">open_in_new</span>
               </a>
             )}

@@ -26,6 +26,7 @@ import HackathonTeam from "./models/HackathonTeam.js";
 import User from "./models/User.js";
 import { optionalAuth } from "./middleware/auth.js";
 import { seedFounderAdmins } from "./seed.js";
+import { runHackathonIngestion } from "./services/ingestion/syncService.js";
 
 // Set reliable DNS servers for MongoDB Atlas SRV resolution
 try {
@@ -270,6 +271,22 @@ if (!process.env.VERCEL) {
     .then(() => {
       app.listen(PORT, () => {
         console.log(`server is running on port ${PORT}`);
+
+        // Automated Background Ingestion for Karnataka Hackathons
+        setTimeout(() => {
+          console.log("[Scheduler] Initiating automatic startup sync for Karnataka hackathons...");
+          runHackathonIngestion().catch((err) => {
+            console.warn("[Scheduler] Startup Karnataka hackathon sync warning:", err.message);
+          });
+        }, 10000);
+
+        const SIX_HOURS = 6 * 60 * 60 * 1000;
+        setInterval(() => {
+          console.log("[Scheduler] Running scheduled recurring sync for Karnataka hackathons...");
+          runHackathonIngestion().catch((err) => {
+            console.warn("[Scheduler] Recurring Karnataka hackathon sync warning:", err.message);
+          });
+        }, SIX_HOURS);
       });
     })
     .catch((err) => {

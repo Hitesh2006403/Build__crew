@@ -11,6 +11,7 @@ export default function HackathonDetailsModal({
   if (!isOpen || !hackathon) return null;
 
   const isConcluded = hackathon.status === 'closed' || hackathon.status === 'finished';
+  const directRegLink = hackathon.officialRegistrationLink || hackathon.registrationLink || hackathon.officialWebsite || '';
 
   const statusBadgeColor = {
     'open': 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30',
@@ -82,14 +83,14 @@ export default function HackathonDetailsModal({
                   </p>
                 </div>
 
-                {hackathon.officialRegistrationLink && (
+                {directRegLink && (
                   <a
-                    href={hackathon.officialRegistrationLink}
+                    href={directRegLink}
                     target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-all border border-white/15"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs transition-all shadow-md active:scale-[0.98]"
                   >
-                    <span>Official Portal</span>
+                    <span>Register on Official Site</span>
                     <span className="material-symbols-outlined text-sm">open_in_new</span>
                   </a>
                 )}
@@ -367,14 +368,14 @@ export default function HackathonDetailsModal({
         {/* Modal Footer Controls */}
         <div className="p-4 sm:p-6 bg-surface-container-low border-t border-surface-container-high flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
-            {hackathon.officialRegistrationLink && (
+            {directRegLink && (
               <a
-                href={hackathon.officialRegistrationLink}
+                href={directRegLink}
                 target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface text-xs font-bold transition-all inline-flex items-center gap-1.5"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-extrabold shadow-sm transition-all inline-flex items-center gap-1.5 active:scale-[0.98]"
               >
-                <span>Official Registration</span>
+                <span>Register on Official Site</span>
                 <span className="material-symbols-outlined text-sm">open_in_new</span>
               </a>
             )}

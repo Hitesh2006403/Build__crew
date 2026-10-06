@@ -46,6 +46,12 @@ export const hackathonsApi = {
       body: data,
     });
   },
+
+  syncKarnatakaHackathons: async () => {
+    return await apiClient('/hackathons/sync-karnataka', {
+      method: 'POST',
+    });
+  },
 };
 
 export default hackathonsApi;

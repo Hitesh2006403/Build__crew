@@ -251,7 +251,12 @@ export default function HackathonCard({
   };
 
   const orgName = typeof hackathon.organizer === 'object' ? hackathon.organizer?.name : hackathon.organizer || 'Collegiate Host';
-  const regLink = hackathon.officialRegistrationLink || (typeof hackathon.organizer === 'object' ? hackathon.organizer?.website : '') || '#';
+  const regLink =
+    hackathon.officialRegistrationLink ||
+    hackathon.registrationLink ||
+    hackathon.officialWebsite ||
+    (typeof hackathon.organizer === 'object' ? hackathon.organizer?.website : '') ||
+    '';
 
   // ========================================================
   // LIST VIEW
@@ -333,15 +338,17 @@ export default function HackathonCard({
             </button>
           )}
 
-          {regLink !== '#' && (
+          {regLink && regLink !== '#' && (
             <a
               href={regLink}
               target="_blank"
-              rel="noreferrer"
-              className="p-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface transition-all inline-flex items-center justify-center"
-              title="Official Registration"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-bold shadow-xs transition-all inline-flex items-center gap-1.5 shrink-0"
+              title="Open Official Registration Website"
             >
-              <span className="material-symbols-outlined text-base">open_in_new</span>
+              <span>Register</span>
+              <span className="material-symbols-outlined text-sm">open_in_new</span>
             </a>
           )}
         </div>
@@ -602,15 +609,16 @@ export default function HackathonCard({
           </button>
         )}
 
-        {regLink !== '#' && (
+        {regLink && regLink !== '#' && (
           <a
             href={regLink}
             target="_blank"
-            rel="noreferrer"
-            className="py-2 px-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-xs font-bold transition-all inline-flex items-center justify-center gap-1 shrink-0"
-            title="Open Official Registration"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white text-xs font-extrabold shadow-xs transition-all inline-flex items-center justify-center gap-1.5 shrink-0"
+            title="Open Official Registration Website"
           >
-            <span className="hidden xl:inline text-[11px]">Register</span>
+            <span>Register</span>
             <span className="material-symbols-outlined text-sm">open_in_new</span>
           </a>
         )}
