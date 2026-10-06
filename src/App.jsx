@@ -484,7 +484,11 @@ export default function App() {
             const loadedProjects = Array.isArray(data.projects) ? data.projects : [];
             setProjects(loadedProjects);
             setSelectedProject(prev => prev || (loadedProjects.length > 0 ? loadedProjects[0] : null));
-            setHackathons(Array.isArray(data.hackathons) ? data.hackathons : []);
+            const loadedHacks = Array.isArray(data.hackathons) ? data.hackathons : [];
+            setHackathons(loadedHacks);
+            if (loadedHacks.length === 0) {
+              fetchHackathons().catch(() => {});
+            }
             setSquadWins(Array.isArray(data.squadWins) ? data.squadWins : []);
             setBuilders(Array.isArray(data.builders) ? data.builders : []);
             setHackathonSquads(Array.isArray(data.hackathonSquads) ? data.hackathonSquads : []);
@@ -517,6 +521,13 @@ export default function App() {
       clearTimeout(safetyTimer);
     };
   }, [fetchBuilders, fetchHackathons, fetchProjects, fetchUserData]);
+
+  // Always fetch fresh hackathons whenever visiting or viewing hackathon pages
+  useEffect(() => {
+    if (pathname === '/hackathons' || pathname.startsWith('/hackathon')) {
+      fetchHackathons();
+    }
+  }, [pathname, fetchHackathons]);
 
   // Auth Handlers with React Router URL redirection
   const handleLoginSuccess = async (user) => {

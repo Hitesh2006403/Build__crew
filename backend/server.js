@@ -173,13 +173,33 @@ apiRouter.get("/bootstrap", optionalAuth, async (req, res) => {
       HackathonTeam.find().populate("createdBy", "name email avatar profileImage").sort({ createdAt: -1 }).lean(),
     ]);
 
+    const cleanBuilders = (builders || []).map((u) => {
+      if (u.profileImage && u.profileImage.startsWith("data:") && u.profileImage.length > 2000) {
+        return { ...u, profileImage: u.avatar || "" };
+      }
+      return u;
+    });
+
+    const cleanProjects = (projects || []).map((p) => {
+      const cleanCreatedBy =
+        p.createdBy && p.createdBy.profileImage && p.createdBy.profileImage.startsWith("data:") && p.createdBy.profileImage.length > 2000
+          ? { ...p.createdBy, profileImage: p.createdBy.avatar || "" }
+          : p.createdBy;
+      const cleanMembers = (p.members || []).map((m) =>
+        m && m.profileImage && m.profileImage.startsWith("data:") && m.profileImage.length > 2000
+          ? { ...m, profileImage: m.avatar || "" }
+          : m
+      );
+      return { ...p, createdBy: cleanCreatedBy, members: cleanMembers };
+    });
+
     return res.json({
       success: true,
       data: {
-        projects,
+        projects: cleanProjects,
         hackathons,
         squadWins: [],
-        builders,
+        builders: cleanBuilders,
         hackathonSquads,
       },
     });
