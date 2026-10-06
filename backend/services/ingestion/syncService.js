@@ -1,9 +1,11 @@
 // backend/services/ingestion/syncService.js
+import mongoose from "mongoose";
 import Hackathon from "../../models/Hackathon.js";
 import { fetchUnstopHackathons } from "./adapters/unstopAdapter.js";
 import { fetchDevfolioHackathons } from "./adapters/devfolioAdapter.js";
+import { fetchHackerEarthHackathons } from "./adapters/hackerEarthAdapter.js";
 import { isKarnatakaEvent } from "./karnatakaFilter.js";
-import { findDuplicateHackathon } from "./deduplicator.js";
+import { findDuplicateHackathon, deduplicateCandidates } from "./deduplicator.js";
 
 function computeStatus(regDeadlineDate) {
   if (!regDeadlineDate) {
@@ -28,39 +30,41 @@ function computeStatus(regDeadlineDate) {
 }
 
 function isEventDurationOver(item, now = Date.now()) {
-  // Check endDateRaw
   if (item.endDateRaw) {
     const endMs = new Date(item.endDateRaw).getTime();
-    if (!isNaN(endMs) && endMs < now) {
-      return true;
-    }
+    if (!isNaN(endMs) && endMs < now) return true;
   }
-
-  // Check parsed endDate
   if (item.endDate) {
     const parsed = Date.parse(item.endDate);
-    if (!isNaN(parsed) && parsed < now) {
-      return true;
-    }
+    if (!isNaN(parsed) && parsed < now) return true;
   }
-
-  // Check regDeadlineDate (if past by 24+ hours)
   if (item.regDeadlineDate) {
     const regMs = new Date(item.regDeadlineDate).getTime();
-    if (!isNaN(regMs) && regMs < now - 24 * 60 * 60 * 1000) {
-      return true;
-    }
+    if (!isNaN(regMs) && regMs < now - 24 * 60 * 60 * 1000) return true;
   }
-
   return false;
 }
 
 /**
- * Master sync service to fetch, filter, de-duplicate, persist,
- * and automatically delete expired Karnataka hackathons.
+ * Master multi-platform sync service:
+ * Fetches from Unstop, Devfolio, HackerEarth, filters, deduplicates across platforms,
+ * deletes expired events, and persists active events to MongoDB.
  */
 export async function runHackathonIngestion() {
-  console.log("[Hackathon Ingestion] Starting automated daily Karnataka hackathon ingestion run...");
+  console.log("[Hackathon Ingestion] Starting multi-platform hackathon sync (Unstop, Devfolio, HackerEarth)...");
+
+  if (mongoose.connection.readyState !== 1) {
+    console.log("[Hackathon Ingestion] Waiting for active MongoDB connection...");
+    await new Promise((resolve) => {
+      if (mongoose.connection.readyState === 1) return resolve();
+      const onOpen = () => {
+        mongoose.connection.off("open", onOpen);
+        resolve();
+      };
+      mongoose.connection.on("open", onOpen);
+      setTimeout(resolve, 6000);
+    });
+  }
 
   const now = Date.now();
 
@@ -70,91 +74,79 @@ export async function runHackathonIngestion() {
     const allExisting = await Hackathon.find({});
     for (const h of allExisting) {
       if (isEventDurationOver(h, now)) {
-        console.log(`[Hackathon Ingestion] Auto-deleting expired hackathon: "${h.title}" (Circuit ID: ${h.circuitId})`);
         await Hackathon.findByIdAndDelete(h._id);
         deletedExpiredCount++;
       }
     }
     if (deletedExpiredCount > 0) {
-      console.log(`[Hackathon Ingestion] Cleaned up ${deletedExpiredCount} expired hackathons from database.`);
+      console.log(`[Hackathon Ingestion] Auto-deleted ${deletedExpiredCount} expired hackathons from database.`);
     }
   } catch (cleanErr) {
-    console.warn("[Hackathon Ingestion] Auto-deletion error:", cleanErr.message);
+    console.warn("[Hackathon Ingestion] Expired cleanup error:", cleanErr.message);
   }
 
-  // 2. Concurrently fetch raw candidate events from multiple platforms
-  const [unstopEvents, devfolioEvents] = await Promise.allSettled([
+  // 2. Concurrently fetch candidate events from ALL connected platforms
+  const [unstopRes, devfolioRes, hackerEarthRes] = await Promise.allSettled([
     fetchUnstopHackathons(),
     fetchDevfolioHackathons(),
+    fetchHackerEarthHackathons(),
   ]);
 
-  const rawUnstop = unstopEvents.status === "fulfilled" ? unstopEvents.value : [];
-  const rawDevfolio = devfolioEvents.status === "fulfilled" ? devfolioEvents.value : [];
-  const allCandidates = [...rawUnstop, ...rawDevfolio];
+  const rawUnstop = unstopRes.status === "fulfilled" ? unstopRes.value : [];
+  const rawDevfolio = devfolioRes.status === "fulfilled" ? devfolioRes.value : [];
+  const rawHackerEarth = hackerEarthRes.status === "fulfilled" ? hackerEarthRes.value : [];
 
+  const allRawCandidates = [...rawUnstop, ...rawDevfolio, ...rawHackerEarth];
   console.log(
-    `[Hackathon Ingestion] Scanned ${allCandidates.length} candidate events (${rawUnstop.length} Unstop, ${rawDevfolio.length} Devfolio).`
+    `[Hackathon Ingestion] Fetched raw candidates: ${allRawCandidates.length} total (${rawUnstop.length} Unstop, ${rawDevfolio.length} Devfolio, ${rawHackerEarth.length} HackerEarth).`
   );
 
-  // 3. Filter for Karnataka events
-  const karnatakaEvents = allCandidates.filter(isKarnatakaEvent);
-  console.log(`[Hackathon Ingestion] Identified ${karnatakaEvents.length} events located in or affiliated with Karnataka.`);
+  // 3. Filter for Karnataka & open collegiate/virtual events
+  const relevantCandidates = allRawCandidates.filter(isKarnatakaEvent);
+
+  // 4. Cross-Platform Deduplication within the incoming batch
+  const uniqueCandidates = deduplicateCandidates(relevantCandidates);
+  console.log(`[Hackathon Ingestion] Filtered & deduplicated to ${uniqueCandidates.length} unique active hackathons.`);
 
   let insertedCount = 0;
   let updatedCount = 0;
 
-  // 4. Process & Persist active events into MongoDB
-  for (const item of karnatakaEvents) {
+  // Cache existing DB hackathons to optimize query performance
+  const existingDbHacks = await Hackathon.find({}, "title officialWebsite registrationLink").lean();
+
+  // 5. Upsert active hackathons into MongoDB
+  for (const item of uniqueCandidates) {
     try {
-      // Discard if its duration is already over
-      if (isEventDurationOver(item, now)) {
-        continue;
-      }
+      if (isEventDurationOver(item, now)) continue;
 
       const { status, statusLabel } = computeStatus(item.regDeadlineDate);
-
-      // Check if duplicate exists in DB
-      const existing = await findDuplicateHackathon(item);
+      const existing = await findDuplicateHackathon(item, existingDbHacks);
 
       const targetRegLink = item.registrationLink || item.officialRegistrationLink || item.officialWebsite || "";
       const targetWebsite = item.officialWebsite || item.registrationLink || "";
 
       if (existing) {
-        // If existing event's duration has ended, delete it
         if (isEventDurationOver(existing, now)) {
           await Hackathon.findByIdAndDelete(existing._id);
           deletedExpiredCount++;
           continue;
         }
 
-        // Update freshness, direct registration links, and deadline status
-        const updateFields = {
-          status,
-          statusLabel,
-          officialRegistrationLink: targetRegLink || existing.officialRegistrationLink,
-          registrationLink: targetRegLink || existing.registrationLink,
-          officialWebsite: targetWebsite || existing.officialWebsite,
-        };
-
-        if (item.regDeadlineDate && !existing.regDeadlineDate) {
-          updateFields.regDeadlineDate = item.regDeadlineDate;
-          updateFields.registrationDeadline = item.registrationDeadline;
-        }
-        if (item.prizePool && (!existing.prizePool || existing.prizePool === "₹50,000")) {
-          updateFields.prizePool = item.prizePool;
-        }
-        if (item.image && (!existing.image || existing.image.includes("lh3.googleusercontent"))) {
-          updateFields.image = item.image;
-          updateFields.heroImage = item.image;
-        }
-
-        await Hackathon.findByIdAndUpdate(existing._id, { $set: updateFields });
+        // Update existing record without creating duplicate
+        await Hackathon.findByIdAndUpdate(existing._id, {
+          $set: {
+            status,
+            statusLabel,
+            officialRegistrationLink: targetRegLink || existing.officialRegistrationLink,
+            registrationLink: targetRegLink || existing.registrationLink,
+            officialWebsite: targetWebsite || existing.officialWebsite,
+            regDeadlineDate: item.regDeadlineDate || existing.regDeadlineDate,
+            registrationDeadline: item.registrationDeadline || existing.registrationDeadline,
+          },
+        });
         updatedCount++;
       } else {
-        // Skip events whose registration already concluded
-        if (status === "closed") {
-          continue;
-        }
+        if (status === "closed") continue;
 
         const circuitCode = `BC-KA-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -165,9 +157,9 @@ export async function runHackathonIngestion() {
           organizer: {
             name: item.organizerName || "Collegiate Host",
             website: targetWebsite,
-            partnerType: "Karnataka Collegiate Partner",
+            partnerType: "Sanctioned Circuit Partner",
           },
-          description: item.description || `Collegiate hackathon hosted in Karnataka.`,
+          description: item.description || `Live hackathon open for students and builders.`,
           officialWebsite: targetWebsite,
           officialRegistrationLink: targetRegLink,
           registrationLink: targetRegLink,
@@ -199,26 +191,27 @@ export async function runHackathonIngestion() {
           isVerified: true,
           status,
           statusLabel,
-          officialSource: `Automated Karnataka Sync (${item.source})`,
+          officialSource: `Multi-Platform Sync (${item.source})`,
         });
 
         insertedCount++;
       }
     } catch (saveErr) {
-      console.warn(`[Hackathon Ingestion] Failed to persist "${item.title}":`, saveErr.message);
+      console.warn(`[Hackathon Ingestion] Persist error for "${item.title}":`, saveErr.message);
     }
   }
 
   const resultStats = {
-    scanned: allCandidates.length,
-    karnatakaTotal: karnatakaEvents.length,
+    totalRawScanned: allRawCandidates.length,
+    uniqueEligible: uniqueCandidates.length,
     inserted: insertedCount,
     updated: updatedCount,
     deletedExpired: deletedExpiredCount,
+    sourcesConnected: ["Unstop", "Devfolio", "HackerEarth"],
     timestamp: new Date().toISOString(),
   };
 
-  console.log("[Hackathon Ingestion] Run complete:", resultStats);
+  console.log("[Hackathon Ingestion] Sync completed:", resultStats);
   return resultStats;
 }
 

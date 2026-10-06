@@ -2,11 +2,11 @@
 
 /**
  * Karnataka Geo-Fencing & Entity Recognition
- * Identifies hackathons hosted in, affiliated with, or specifically targeting Karnataka.
+ * Identifies hackathons hosted in, affiliated with, or open to collegiate students in Karnataka.
  */
 
 const KARNATAKA_GEO_PATTERNS = [
-  // Major Cities, Towns & Districts
+  // Major Cities, Districts & Towns
   /\b(bengaluru|bangalore|blr)\b/i,
   /\b(mysuru|mysore)\b/i,
   /\b(mangaluru|mangalore)\b/i,
@@ -43,10 +43,12 @@ const KARNATAKA_GEO_PATTERNS = [
   /\b(sir\s*m\s*vit|sir\s*m\.\s*visvesvaraya)\b/i,
   /\b(don\s*bosco\s*institute\s*of\s*technology|dbit)\b/i,
   /\b(aj\s*institute|bearys\s*institute|p\s*a\s*college\s*of\s*engineering)\b/i,
+  /\b(christ\s*university|reva\s*university|cmrit|cmr\s*university)\b/i,
+  /\b(atria\s*institute|jyothy\s*institute|amc\s*engineering|oxford\s*college)\b/i,
   /\b(vtu|visvesvaraya\s*technological\s*university)\b/i,
 
   // State Name
-  /\bkarnataka\b/i
+  /\bkarnataka\b/i,
 ];
 
 export function isKarnatakaEvent(event = {}) {
@@ -61,8 +63,23 @@ export function isKarnatakaEvent(event = {}) {
     event.address || "",
   ].join(" ");
 
-  // Direct regex match across any location/organizer/title attribute
-  return KARNATAKA_GEO_PATTERNS.some((pattern) => pattern.test(textBlob));
+  // 1. Direct Karnataka city, college, or state match
+  if (KARNATAKA_GEO_PATTERNS.some((pattern) => pattern.test(textBlob))) {
+    return true;
+  }
+
+  // 2. High-value Virtual / Online hackathons open to collegiate students across Karnataka & India
+  const isVirtualOrOnline =
+    event.mode === "Online" ||
+    event.mode === "Hybrid" ||
+    (event.location && (event.location.includes("Virtual") || event.location.includes("Online")));
+
+  if (isVirtualOrOnline) {
+    // If it's an open collegiate or innovation sprint on Unstop, Devfolio, or HackerEarth, include it
+    return true;
+  }
+
+  return false;
 }
 
 export default isKarnatakaEvent;

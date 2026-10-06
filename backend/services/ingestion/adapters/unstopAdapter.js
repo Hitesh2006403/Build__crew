@@ -45,18 +45,28 @@ function parseFee(item) {
 }
 
 export async function fetchUnstopHackathons() {
-  const searchTerms = ["bangalore", "bengaluru", "karnataka", "mysore", "mangalore", "manipal", "hubli"];
+  const urls = [
+    // Multi-page open hackathons (fetches hundreds of active competitions)
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&per_page=50&page=1&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&per_page=50&page=2&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&per_page=50&page=3&oppstatus=open",
+    // Targeted Karnataka tech & collegiate hubs
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=bangalore&per_page=30&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=bengaluru&per_page=30&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=karnataka&per_page=30&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=mysore&per_page=20&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=mangalore&per_page=20&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=manipal&per_page=20&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=hubli&per_page=20&oppstatus=open",
+  ];
+
   const seenIds = new Set();
   const results = [];
 
-  for (const term of searchTerms) {
+  for (const url of urls) {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-
-      const url = `https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=${encodeURIComponent(
-        term
-      )}&per_page=25&oppstatus=open`;
+      const timeout = setTimeout(() => controller.abort(), 9000);
 
       const res = await fetch(url, {
         signal: controller.signal,
@@ -92,7 +102,6 @@ export async function fetchUnstopHackathons() {
             ? `${formatDateStr(startDate)} - ${formatDateStr(endDate)}`
             : formatDateStr(startDate) || formatDateStr(regDeadline) || "Upcoming 2026";
 
-        // Extract tracks from required skills or default to General / AI
         const rawSkills = (item.required_skills || []).map((s) => s.skill || s.skill_name).filter(Boolean);
         const trackLabels = rawSkills.length > 0 ? rawSkills.slice(0, 4) : ["AI / ML", "Full Stack", "General"];
         const tracks = trackLabels.map((t) => t.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10));
@@ -138,7 +147,7 @@ export async function fetchUnstopHackathons() {
         });
       }
     } catch (err) {
-      console.warn(`[Unstop Adapter] Search error for term "${term}":`, err.message);
+      console.warn(`[Unstop Adapter] Error fetching url ${url.slice(0, 60)}:`, err.message);
     }
   }
 

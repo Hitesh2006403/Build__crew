@@ -19,11 +19,19 @@ function formatDateStr(isoStr) {
 }
 
 export async function fetchDevfolioHackathons() {
-  const searchTerms = ["bangalore", "bengaluru", "karnataka", "india"];
+  const queryConfigs = [
+    { filter: "open", from: 0, size: 50 },
+    { filter: "open", from: 50, size: 50 },
+    { q: "bangalore", from: 0, size: 30 },
+    { q: "bengaluru", from: 0, size: 30 },
+    { q: "karnataka", from: 0, size: 30 },
+    { q: "india", from: 0, size: 30 },
+  ];
+
   const seenSlugs = new Set();
   const results = [];
 
-  for (const q of searchTerms) {
+  for (const config of queryConfigs) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
@@ -36,11 +44,7 @@ export async function fetchDevfolioHackathons() {
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         },
-        body: JSON.stringify({
-          q,
-          from: 0,
-          size: 20,
-        }),
+        body: JSON.stringify(config),
       });
 
       clearTimeout(timeout);
@@ -105,7 +109,7 @@ export async function fetchDevfolioHackathons() {
         });
       }
     } catch (err) {
-      console.warn(`[Devfolio Adapter] Search error for query "${q}":`, err.message);
+      console.warn(`[Devfolio Adapter] Error fetching:`, err.message);
     }
   }
 
