@@ -102,8 +102,29 @@ const KARNATAKA_DISTRICT_PATTERNS = [
   { match: /\b(yadgir)\b/i, district: "Yadgir" },
 ];
 
+const STATE_PRIMARY_DISTRICTS = {
+  "Delhi": "New Delhi",
+  "Maharashtra": "Mumbai",
+  "Tamil Nadu": "Chennai",
+  "Telangana": "Hyderabad",
+  "Gujarat": "Ahmedabad",
+  "Kerala": "Kochi",
+  "Andhra Pradesh": "Visakhapatnam",
+  "Uttar Pradesh": "Noida",
+  "West Bengal": "Kolkata",
+  "Punjab": "Mohali",
+  "Haryana": "Gurugram",
+  "Rajasthan": "Jaipur",
+  "Madhya Pradesh": "Indore",
+  "Bihar": "Patna",
+  "Odisha": "Bhubaneswar",
+  "Assam": "Guwahati",
+  "Goa": "Panaji",
+};
+
 /**
  * Normalizes location and classifies state and district for any hackathon.
+ * Guarantees that any Karnataka hackathon strictly receives one of the official 31 Karnataka districts.
  */
 export function classifyStateAndDistrict(event = {}) {
   const textBlob = [
@@ -116,7 +137,29 @@ export function classifyStateAndDistrict(event = {}) {
     event.venue || "",
   ].join(" ");
 
-  // 1. Check for Karnataka districts
+  const isOnline =
+    event.mode === "Online" ||
+    (event.location && /\b(virtual|online)\b/i.test(event.location)) ||
+    (event.title && /\b(online|virtual)\b/i.test(event.title));
+
+  // 1. If Online / Virtual
+  if (isOnline) {
+    // Check if hosted by an explicit Karnataka institution (e.g. RVCE, PES, IISc, Manipal)
+    for (const kd of KARNATAKA_DISTRICT_PATTERNS) {
+      if (kd.match.test(textBlob)) {
+        return {
+          state: "Karnataka",
+          district: kd.district,
+        };
+      }
+    }
+    return {
+      state: "Karnataka / Virtual",
+      district: "Virtual / Online",
+    };
+  }
+
+  // 2. Physical / Hybrid: Check for Karnataka districts
   for (const kd of KARNATAKA_DISTRICT_PATTERNS) {
     if (kd.match.test(textBlob)) {
       return {
@@ -126,29 +169,25 @@ export function classifyStateAndDistrict(event = {}) {
     }
   }
 
-  // 2. Check for other Indian states
+  // 3. Physical: If Karnataka state is explicitly mentioned, default to capital
+  if (/\bkarnataka\b/i.test(textBlob)) {
+    return {
+      state: "Karnataka",
+      district: "Bengaluru Urban",
+    };
+  }
+
+  // 4. Physical: Check for other Indian states
   for (const stateName of ALL_INDIAN_STATES) {
-    if (stateName !== "All-India (Virtual)" && new RegExp(`\\b${stateName}\\b`, "i").test(textBlob)) {
+    if (stateName !== "All-India (Virtual)" && stateName !== "Karnataka" && new RegExp(`\\b${stateName}\\b`, "i").test(textBlob)) {
       return {
         state: stateName,
-        district: event.city || "Major Tech Hub",
+        district: event.city || STATE_PRIMARY_DISTRICTS[stateName] || stateName,
       };
     }
   }
 
-  // 3. Check if online/virtual
-  const isOnline =
-    event.mode === "Online" ||
-    (event.location && (event.location.includes("Virtual") || event.location.includes("Online")));
-
-  if (isOnline) {
-    return {
-      state: "Karnataka / Virtual",
-      district: "Virtual / Online",
-    };
-  }
-
-  // Default fallback for collegiate platform
+  // 5. Default fallback for collegiate platform
   return {
     state: "Karnataka",
     district: "Bengaluru Urban",

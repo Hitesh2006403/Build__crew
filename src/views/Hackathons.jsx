@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import HackathonCard from '../components/hackathons/HackathonCard';
 import HackathonDetailsModal from '../components/hackathons/HackathonDetailsModal';
 import HackathonSquadUpModal from '../components/hackathons/HackathonSquadUpModal';
@@ -99,22 +99,19 @@ export default function Hackathons({
   }, []);
 
   // Modals state
-  const [selectedHackathon, setSelectedHackathon] = useState(() => {
+  const [modalHackathon, setModalHackathon] = useState(null);
+
+  // Derived selected hackathon (from modal state or route param)
+  const selectedHackathon = useMemo(() => {
+    if (modalHackathon) return modalHackathon;
     if (selectedHackathonId && Array.isArray(hackathons)) {
       return hackathons.find(h => String(h._id || h.id) === String(selectedHackathonId)) || null;
     }
     return null;
-  });
-
-  useEffect(() => {
-    if (selectedHackathonId && Array.isArray(hackathons)) {
-      const found = hackathons.find(h => String(h._id || h.id) === String(selectedHackathonId));
-      if (found) setSelectedHackathon(found);
-    }
-  }, [selectedHackathonId, hackathons]);
+  }, [modalHackathon, selectedHackathonId, hackathons]);
 
   const handleSelectHackathon = (item) => {
-    setSelectedHackathon(item);
+    setModalHackathon(item);
     if (onSelectHackathon) {
       onSelectHackathon(item);
     }
@@ -311,7 +308,6 @@ export default function Hackathons({
     });
   }, [
     hackathons,
-    flagship,
     searchQuery,
     statusTab,
     activeMode,
@@ -922,7 +918,7 @@ export default function Hackathons({
         hackathon={selectedHackathon}
         isOpen={Boolean(selectedHackathon)}
         onClose={() => {
-          setSelectedHackathon(null);
+          setModalHackathon(null);
           if (onCloseDetails) onCloseDetails();
         }}
         onFindSquad={(h) => handleOpenSquadUp(h)}

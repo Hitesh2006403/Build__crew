@@ -482,6 +482,12 @@ export default function HackathonCard({
                   </span>
                   <span>{hackathon.mode || 'Hybrid'}</span>
                 </span>
+                {hackathon.district && (
+                  <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-amber-200 text-[11px] font-bold border border-white/15 backdrop-blur-md flex items-center gap-1">
+                    <span className="material-symbols-outlined text-xs text-amber-300">location_on</span>
+                    <span>{hackathon.district}</span>
+                  </span>
+                )}
               </div>
               {getStatusBadge()}
             </div>

@@ -99,7 +99,7 @@ export async function fetchUnstopHackathons() {
 
         const fee = parseFee(item);
         const city = item.address_with_country_logo?.city || item.city || "";
-        const state = item.address_with_country_logo?.state || "Karnataka";
+        const rawState = item.address_with_country_logo?.state || "";
         const orgName = item.organisation?.name || "Collegiate Host";
 
         const regDeadline = item.regnRequirements?.end_regn_dt || "";
@@ -117,7 +117,10 @@ export async function fetchUnstopHackathons() {
 
         const isOnline = item.regnRequirements?.work_location_type === "online" || !city;
         const mode = isOnline ? "Online" : "Offline";
-        const locationStr = city ? `${city}, ${state}` : "Karnataka / Virtual";
+        const state = isOnline ? "Karnataka / Virtual" : (rawState || "");
+        const locationStr = isOnline
+          ? (city ? `${city} (Online / Virtual)` : "Virtual / Online")
+          : (city ? (rawState ? `${city}, ${rawState}` : city) : (rawState || "In-Person"));
 
         const publicUrl = item.public_url ? `https://unstop.com/${item.public_url}` : item.short_url || "";
         const bannerImg = item.logoUrl2 || item.banner_mobile?.image_url || DEFAULT_BANNER;

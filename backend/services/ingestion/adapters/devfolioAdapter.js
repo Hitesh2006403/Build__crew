@@ -69,12 +69,10 @@ export async function fetchDevfolioHackathons() {
         const city = item.city || "";
         const state = item.state || "";
 
-        const locationStr =
-          city || state
-            ? `${city ? city + ", " : ""}${state || "Karnataka"}`
-            : item.is_online
-            ? "Virtual"
-            : "Bengaluru, Karnataka";
+        const isOnline = item.is_online || (!city && !state);
+        const locationStr = isOnline
+          ? (city ? `${city} (Virtual)` : "Virtual / Online")
+          : (city || state ? `${city ? city + ", " : ""}${state || ""}`.trim() : "Karnataka");
 
         const tracks = Array.isArray(item.themes) && item.themes.length > 0 ? item.themes : ["Web3", "AI", "Open"];
 
