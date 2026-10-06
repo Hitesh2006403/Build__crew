@@ -201,6 +201,15 @@ export default function HackathonCard({
   const isUpcoming = hackathon.status === 'upcoming';
   const isTeamFull = hackathon.status === 'team-full';
 
+  // Simplified Hackathon ID: e.g. #HK-01, #HK-02
+  const simpleId =
+    hackathon.simpleId ||
+    (hackathon.circuitId
+      ? hackathon.circuitId.startsWith('#')
+        ? hackathon.circuitId
+        : hackathon.circuitId.replace(/BC-(KA|CIRC)-/, '#HK-')
+      : '#HK');
+
   // Extract visual data
   const uploadedImage = getUploadedImage(hackathon);
   const theme = getHackathonTheme(hackathon);
@@ -281,7 +290,10 @@ export default function HackathonCard({
             )}
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2 py-0.5 rounded-md bg-secondary/15 text-secondary text-[11px] font-extrabold border border-secondary/30">
+                {simpleId}
+              </span>
               <h4 className="font-title-md font-extrabold text-on-surface group-hover:text-secondary transition-colors">
                 {hackathon.title}
               </h4>
@@ -289,8 +301,19 @@ export default function HackathonCard({
                 verified
               </span>
             </div>
-            <p className="text-xs text-on-surface-variant font-medium mt-0.5">
-              {orgName} · {hackathon.mode}
+            <p className="text-xs text-on-surface-variant font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span>{orgName}</span>
+              <span>·</span>
+              <span className="capitalize">{hackathon.mode}</span>
+              {hackathon.district && (
+                <>
+                  <span>·</span>
+                  <span className="text-secondary font-semibold flex items-center gap-0.5">
+                    <span className="material-symbols-outlined text-[12px]">location_on</span>
+                    {hackathon.district}
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -385,7 +408,7 @@ export default function HackathonCard({
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="px-2.5 py-0.5 rounded-full bg-black/60 text-white text-[11px] font-extrabold uppercase tracking-wide border border-white/20 backdrop-blur-md flex items-center gap-1">
                   <span className="material-symbols-outlined text-xs text-amber-300">verified</span>
-                  <span>{hackathon.circuitId || 'CIRCUIT'}</span>
+                  <span>{simpleId}</span>
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-semibold border border-white/20 backdrop-blur-md capitalize">
                   {hackathon.mode || 'Hybrid'}
@@ -419,10 +442,18 @@ export default function HackathonCard({
                 {hackathon.title}
               </h3>
 
-              <p className="text-xs font-semibold text-slate-300 truncate flex items-center gap-1">
-                <span className="material-symbols-outlined text-[13px] text-slate-400">account_balance</span>
-                <span>{orgName}</span>
-              </p>
+              <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                <p className="truncate flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[13px] text-slate-400">account_balance</span>
+                  <span>{orgName}</span>
+                </p>
+                {hackathon.district && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-amber-200 border border-white/10 shrink-0">
+                    <span className="material-symbols-outlined text-xs text-amber-300">location_on</span>
+                    <span>{hackathon.district}</span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         ) : (
@@ -443,7 +474,7 @@ export default function HackathonCard({
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white text-[11px] font-extrabold uppercase tracking-wide border border-white/15 backdrop-blur-md flex items-center gap-1">
                   <span className="material-symbols-outlined text-xs text-amber-300">verified</span>
-                  <span>{hackathon.circuitId || 'CIRCUIT'}</span>
+                  <span>{simpleId}</span>
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white text-[11px] font-semibold border border-white/15 backdrop-blur-md capitalize flex items-center gap-1">
                   <span className="material-symbols-outlined text-xs">

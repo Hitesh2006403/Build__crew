@@ -8,6 +8,22 @@ import { fetchCuratedIndiaHackathons } from "./adapters/curatedIndiaAdapter.js";
 import { fetchMlhHackathons } from "./adapters/mlhAdapter.js";
 import { isKarnatakaEvent } from "./karnatakaFilter.js";
 import { findDuplicateHackathon, deduplicateCandidates } from "./deduplicator.js";
+import { classifyStateAndDistrict } from "./geoClassifier.js";
+
+const MONTH_INDEX_MAP = {
+  jan: 0, january: 0,
+  feb: 1, february: 1,
+  mar: 2, march: 2,
+  apr: 3, april: 3,
+  may: 4,
+  jun: 5, june: 5,
+  jul: 6, july: 6,
+  aug: 7, august: 7,
+  sep: 8, sept: 8, september: 8,
+  oct: 9, october: 9,
+  nov: 10, november: 10,
+  dec: 11, december: 11,
+};
 
 function computeStatus(regDeadlineDate) {
   if (!regDeadlineDate) {
@@ -31,29 +47,67 @@ function computeStatus(regDeadlineDate) {
   }
 }
 
+/**
+ * Robust date inspector:
+ * Detects if an event is from a past month (e.g. June, July, May) or already completed.
+ * ONLY accepts ongoing current month (that are not yet finished) and upcoming future months.
+ */
 export function isEventDurationOver(item, now = Date.now()) {
-  // 1. Check registration deadline: if registration deadline is over, mark as expired
-  if (item.regDeadlineDate) {
-    const regMs = new Date(item.regDeadlineDate).getTime();
-    if (!isNaN(regMs) && regMs < now) return true;
-  }
-  if (
-    item.registrationDeadline &&
-    item.registrationDeadline !== "Rolling Admissions" &&
-    item.registrationDeadline !== "Open"
-  ) {
-    const parsedReg = Date.parse(item.registrationDeadline);
-    if (!isNaN(parsedReg) && parsedReg < now) return true;
+  const refDate = new Date(now);
+  const currentYear = refDate.getFullYear();
+  const currentMonth = refDate.getMonth(); // 0-indexed (9 = October)
+  const todayMs = refDate.getTime();
+
+  // 1. Check ISO date fields
+  const isoCandidates = [item.endDateRaw, item.regDeadlineDate, item.startDateRaw].filter(Boolean);
+  for (const iso of isoCandidates) {
+    const d = new Date(iso);
+    if (!isNaN(d.getTime())) {
+      const yr = d.getFullYear();
+      const mo = d.getMonth();
+      if (yr < currentYear || (yr === currentYear && mo < currentMonth)) {
+        return true;
+      }
+      if (d.getTime() < todayMs) {
+        return true;
+      }
+    }
   }
 
-  // 2. Check event end date: if event duration is over, mark as expired
-  if (item.endDateRaw) {
-    const endMs = new Date(item.endDateRaw).getTime();
-    if (!isNaN(endMs) && endMs < now) return true;
+  // 2. Comprehensive text search across dates, startDate, endDate, registrationDeadline
+  const textBlob = `${item.dates || ""} ${item.startDate || ""} ${item.endDate || ""} ${item.registrationDeadline || ""}`.toLowerCase();
+
+  const yearMatch = textBlob.match(/\b(202[0-9])\b/);
+  const eventYear = yearMatch ? parseInt(yearMatch[1], 10) : currentYear;
+
+  if (eventYear < currentYear) {
+    return true;
   }
-  if (item.endDate) {
-    const parsed = Date.parse(item.endDate);
-    if (!isNaN(parsed) && parsed < now) return true;
+
+  const monthMatch = textBlob.match(
+    /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/
+  );
+
+  if (monthMatch) {
+    const eventMonth = MONTH_INDEX_MAP[monthMatch[1]];
+    // If event is in a past month of this year (e.g. May, June, July when current month is Oct)
+    if (eventYear === currentYear && eventMonth < currentMonth) {
+      return true;
+    }
+
+    // If event is in the ongoing current month, check if the days have already passed
+    if (eventYear === currentYear && eventMonth === currentMonth) {
+      const days = [...textBlob.matchAll(/\b([0-2]?[0-9]|3[01])\b/g)]
+        .map((m) => parseInt(m[1], 10))
+        .filter((d) => d >= 1 && d <= 31);
+      if (days.length > 0) {
+        const maxDay = Math.max(...days);
+        const eventEndMs = new Date(currentYear, currentMonth, maxDay, 23, 59, 59).getTime();
+        if (eventEndMs < todayMs) {
+          return true;
+        }
+      }
+    }
   }
 
   return false;
@@ -149,12 +203,18 @@ export async function runHackathonIngestion() {
       const targetRegLink = item.registrationLink || item.officialRegistrationLink || item.officialWebsite || "";
       const targetWebsite = item.officialWebsite || item.registrationLink || "";
 
+      const geo = classifyStateAndDistrict(item);
+
       if (existing) {
         if (isEventDurationOver(existing, now)) {
           await Hackathon.findByIdAndDelete(existing._id);
           deletedExpiredCount++;
           continue;
         }
+
+        const existingSimpleId =
+          existing.simpleId ||
+          (existing.circuitId ? existing.circuitId.replace(/BC-(KA|CIRC)-/, "#HK-") : `#HK-${updatedCount + 1}`);
 
         // Update existing record without creating duplicate
         await Hackathon.findByIdAndUpdate(existing._id, {
@@ -166,17 +226,22 @@ export async function runHackathonIngestion() {
             officialWebsite: targetWebsite || existing.officialWebsite,
             regDeadlineDate: item.regDeadlineDate || existing.regDeadlineDate,
             registrationDeadline: item.registrationDeadline || existing.registrationDeadline,
+            state: geo.state || existing.state || "Karnataka",
+            district: geo.district || existing.district || "Bengaluru Urban",
+            simpleId: existingSimpleId,
           },
         });
         updatedCount++;
       } else {
         if (status === "closed") continue;
 
-        const circuitCode = `BC-KA-${Math.floor(1000 + Math.random() * 9000)}`;
+        insertedCount++;
+        const simpleCode = `#HK-${String(insertedCount).padStart(2, "0")}`;
 
         await Hackathon.create({
           title: item.title,
-          circuitId: circuitCode,
+          circuitId: simpleCode,
+          simpleId: simpleCode,
           subtitle: item.subtitle || `Organized by ${item.organizerName}`,
           organizer: {
             name: item.organizerName || "Collegiate Host",
@@ -196,6 +261,8 @@ export async function runHackathonIngestion() {
           regDeadlineDate: item.regDeadlineDate || "",
           mode: item.mode || "Offline",
           location: item.location || "Bengaluru, Karnataka",
+          state: geo.state,
+          district: geo.district,
           registrationFee: item.registrationFee || "₹0 / Free",
           feeType: item.feeType || "free",
           feeAmount: Number(item.feeAmount) || 0,

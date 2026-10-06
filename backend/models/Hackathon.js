@@ -11,6 +11,10 @@ const hackathonSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    simpleId: {
+      type: String,
+      default: "",
+    },
     subtitle: {
       type: String,
       default: "",
@@ -92,6 +96,14 @@ const hackathonSchema = new mongoose.Schema(
     location: {
       type: String,
       default: "Collegiate Venue / Virtual",
+    },
+    state: {
+      type: String,
+      default: "Karnataka",
+    },
+    district: {
+      type: String,
+      default: "Bengaluru Urban",
     },
     registrationFee: {
       type: String,

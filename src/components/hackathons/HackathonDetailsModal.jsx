@@ -44,12 +44,19 @@ export default function HackathonDetailsModal({
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-xs font-bold uppercase tracking-wider">
               <span className="material-symbols-outlined text-xs text-blue-400">verified</span>
-              {hackathon.circuitId || 'CIRCUIT SANCTIONED'}
+              {hackathon.simpleId || (hackathon.circuitId ? (hackathon.circuitId.startsWith('#') ? hackathon.circuitId : hackathon.circuitId.replace(/BC-(KA|CIRC)-/, '#HK-')) : '#HK')}
             </span>
 
             <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-slate-300 text-xs font-semibold capitalize">
               {hackathon.mode} Format
             </span>
+
+            {hackathon.district && (
+              <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-slate-300 text-xs font-semibold flex items-center gap-1">
+                <span className="material-symbols-outlined text-xs text-secondary">location_on</span>
+                <span>{hackathon.district}{hackathon.state && hackathon.state !== 'Karnataka' ? `, ${hackathon.state}` : ''}</span>
+              </span>
+            )}
 
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1.5 ${statusBadgeColor}`}>
               <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
