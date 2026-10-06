@@ -29,3 +29,10 @@ dist-ssr
 !*.env.example
 backend/.env
 .vercel
+
+# GitHub Actions workflows & local configs
+.github/
+.github/workflows/
+.github/workflows/daily_hackathon_sync.yml
+.github/workflows/hackathon-sync.yml
+

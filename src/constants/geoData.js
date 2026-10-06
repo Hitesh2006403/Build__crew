@@ -1,5 +1,6 @@
 // src/constants/geoData.js
 
+// Official 31 Karnataka Districts (+ Virtual)
 export const KARNATAKA_DISTRICTS = [
   "Bagalkot",
   "Ballari",
@@ -35,88 +36,119 @@ export const KARNATAKA_DISTRICTS = [
   "Yadgir",
 ];
 
-// Comprehensive district & tech hub directory (alphabet-indexed)
-export const ALL_DISTRICTS = [
-  // A - Prominent Indian collegiate tech districts & hubs
-  "Agra",
-  "Ahmedabad",
-  "Alappuzha",
-  "Amritsar",
-  "Anantapur",
-  // B
-  "Bagalkot",
-  "Ballari",
-  "Belagavi",
-  "Bengaluru Rural",
-  "Bengaluru Urban",
-  "Bhopal",
-  "Bhubaneswar",
-  "Bidar",
-  // C
-  "Chamarajanagar",
-  "Chandigarh",
-  "Chennai",
-  "Chikkaballapur",
-  "Chikkamagaluru",
-  "Chitradurga",
-  "Coimbatore",
-  // D
-  "Dakshina Kannada",
-  "Davanagere",
-  "Delhi NCR",
-  "Dharwad",
-  // E & G
-  "Ernakulam",
-  "Gadag",
-  "Gurugram",
-  "Guwahati",
-  // H
-  "Hassan",
-  "Haveri",
-  "Hyderabad",
-  // I, J, K
-  "Indore",
-  "Jaipur",
-  "Kalaburagi",
-  "Kochi",
-  "Kodagu",
-  "Kolar",
-  "Kolkata",
-  "Koppal",
-  "Kozhikode",
-  // L, M
-  "Lucknow",
-  "Mandya",
-  "Mangaluru",
-  "Mumbai",
-  "Mysuru",
-  // N, P
-  "Nagpur",
-  "Noida",
-  "Patna",
-  "Pune",
-  // R, S
-  "Raichur",
-  "Raipur",
-  "Ramanagara",
-  "Ranchi",
-  "Shivamogga",
-  "Surat",
-  // T, U, V, W, Y
-  "Thiruvananthapuram",
-  "Tumakuru",
-  "Udupi",
-  "Uttara Kannada",
-  "Vadodara",
-  "Varanasi",
-  "Vijayapura",
-  "Vijayanagara",
-  "Visakhapatnam",
-  "Virtual / Online",
-  "Yadgir",
-];
+// District mapping strictly grouped by State
+export const STATE_DISTRICTS_MAP = {
+  "Karnataka": KARNATAKA_DISTRICTS,
+  "Karnataka / Virtual": ["Virtual / Online", ...KARNATAKA_DISTRICTS],
+  "Delhi": [
+    "Central Delhi",
+    "East Delhi",
+    "New Delhi",
+    "North Delhi",
+    "South Delhi",
+    "West Delhi",
+  ],
+  "Maharashtra": [
+    "Aurangabad",
+    "Mumbai",
+    "Nagpur",
+    "Nashik",
+    "Pune",
+    "Thane",
+  ],
+  "Tamil Nadu": [
+    "Chennai",
+    "Coimbatore",
+    "Madurai",
+    "Salem",
+    "Tiruchirappalli",
+  ],
+  "Telangana": [
+    "Hyderabad",
+    "Karimnagar",
+    "Nizamabad",
+    "Warangal",
+  ],
+  "Gujarat": [
+    "Ahmedabad",
+    "Gandhinagar",
+    "Rajkot",
+    "Surat",
+    "Vadodara",
+  ],
+  "Kerala": [
+    "Alappuzha",
+    "Kochi",
+    "Kozhikode",
+    "Thiruvananthapuram",
+    "Thrissur",
+  ],
+  "Andhra Pradesh": [
+    "Anantapur",
+    "Guntur",
+    "Tirupati",
+    "Vijayawada",
+    "Visakhapatnam",
+  ],
+  "Uttar Pradesh": [
+    "Agra",
+    "Kanpur",
+    "Lucknow",
+    "Noida",
+    "Prayagraj",
+    "Varanasi",
+  ],
+  "West Bengal": [
+    "Durgapur",
+    "Howrah",
+    "Kolkata",
+    "Siliguri",
+  ],
+  "Punjab": [
+    "Amritsar",
+    "Jalandhar",
+    "Ludhiana",
+    "Mohali",
+    "Patiala",
+  ],
+  "Haryana": [
+    "Ambala",
+    "Faridabad",
+    "Gurugram",
+    "Panipat",
+  ],
+  "Rajasthan": [
+    "Jaipur",
+    "Jodhpur",
+    "Kota",
+    "Udaipur",
+  ],
+  "Madhya Pradesh": [
+    "Bhopal",
+    "Gwalior",
+    "Indore",
+    "Jabalpur",
+  ],
+  "Bihar": [
+    "Bhagalpur",
+    "Gaya",
+    "Muzaffarpur",
+    "Patna",
+  ],
+  "Odisha": [
+    "Bhubaneswar",
+    "Cuttack",
+    "Rourkela",
+  ],
+  "Assam": [
+    "Dibrugarh",
+    "Guwahati",
+    "Silchar",
+  ],
+};
 
 export const ALL_INDIAN_STATES = [
+  "Karnataka",
   "Andhra Pradesh",
   "Arunachal Pradesh",
   "Assam",
@@ -129,7 +161,6 @@ export const ALL_INDIAN_STATES = [
   "Himachal Pradesh",
   "Jammu and Kashmir",
   "Jharkhand",
-  "Karnataka",
   "Kerala",
   "Madhya Pradesh",
   "Maharashtra",
@@ -152,6 +183,6 @@ export const ALL_INDIAN_STATES = [
 
 export default {
   KARNATAKA_DISTRICTS,
-  ALL_DISTRICTS,
+  STATE_DISTRICTS_MAP,
   ALL_INDIAN_STATES,
 };
