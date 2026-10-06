@@ -4,6 +4,8 @@ import Hackathon from "../../models/Hackathon.js";
 import { fetchUnstopHackathons } from "./adapters/unstopAdapter.js";
 import { fetchDevfolioHackathons } from "./adapters/devfolioAdapter.js";
 import { fetchHackerEarthHackathons } from "./adapters/hackerEarthAdapter.js";
+import { fetchCuratedIndiaHackathons } from "./adapters/curatedIndiaAdapter.js";
+import { fetchMlhHackathons } from "./adapters/mlhAdapter.js";
 import { isKarnatakaEvent } from "./karnatakaFilter.js";
 import { findDuplicateHackathon, deduplicateCandidates } from "./deduplicator.js";
 
@@ -47,11 +49,15 @@ function isEventDurationOver(item, now = Date.now()) {
 
 /**
  * Master multi-platform sync service:
- * Fetches from Unstop, Devfolio, HackerEarth, filters, deduplicates across platforms,
- * deletes expired events, and persists active events to MongoDB.
+ * Concurrently fetches from Unstop, Devfolio, HackerEarth, India Circuit / SIH, and MLH,
+ * filters for Karnataka and open collegiate/virtual events,
+ * deduplicates across platforms to guarantee 0 duplicates,
+ * auto-deletes expired events, and persists active events to MongoDB.
  */
 export async function runHackathonIngestion() {
-  console.log("[Hackathon Ingestion] Starting multi-platform hackathon sync (Unstop, Devfolio, HackerEarth)...");
+  console.log(
+    "[Hackathon Ingestion] Starting multi-platform sync across Unstop, Devfolio, HackerEarth, India Circuit, and MLH..."
+  );
 
   if (mongoose.connection.readyState !== 1) {
     console.log("[Hackathon Ingestion] Waiting for active MongoDB connection...");
@@ -86,19 +92,25 @@ export async function runHackathonIngestion() {
   }
 
   // 2. Concurrently fetch candidate events from ALL connected platforms
-  const [unstopRes, devfolioRes, hackerEarthRes] = await Promise.allSettled([
+  const [unstopRes, devfolioRes, hackerEarthRes, curatedIndiaRes, mlhRes] = await Promise.allSettled([
     fetchUnstopHackathons(),
     fetchDevfolioHackathons(),
     fetchHackerEarthHackathons(),
+    fetchCuratedIndiaHackathons(),
+    fetchMlhHackathons(),
   ]);
 
   const rawUnstop = unstopRes.status === "fulfilled" ? unstopRes.value : [];
   const rawDevfolio = devfolioRes.status === "fulfilled" ? devfolioRes.value : [];
   const rawHackerEarth = hackerEarthRes.status === "fulfilled" ? hackerEarthRes.value : [];
+  const rawCuratedIndia = curatedIndiaRes.status === "fulfilled" ? curatedIndiaRes.value : [];
+  const rawMlh = mlhRes.status === "fulfilled" ? mlhRes.value : [];
 
-  const allRawCandidates = [...rawUnstop, ...rawDevfolio, ...rawHackerEarth];
+  const allRawCandidates = [...rawUnstop, ...rawDevfolio, ...rawHackerEarth, ...rawCuratedIndia, ...rawMlh];
   console.log(
-    `[Hackathon Ingestion] Fetched raw candidates: ${allRawCandidates.length} total (${rawUnstop.length} Unstop, ${rawDevfolio.length} Devfolio, ${rawHackerEarth.length} HackerEarth).`
+    `[Hackathon Ingestion] Fetched raw candidates: ${allRawCandidates.length} total (` +
+      `${rawUnstop.length} Unstop, ${rawDevfolio.length} Devfolio, ${rawHackerEarth.length} HackerEarth, ` +
+      `${rawCuratedIndia.length} India Circuit, ${rawMlh.length} MLH).`
   );
 
   // 3. Filter for Karnataka & open collegiate/virtual events
@@ -207,7 +219,13 @@ export async function runHackathonIngestion() {
     inserted: insertedCount,
     updated: updatedCount,
     deletedExpired: deletedExpiredCount,
-    sourcesConnected: ["Unstop", "Devfolio", "HackerEarth"],
+    sourcesConnected: [
+      "Unstop",
+      "Devfolio",
+      "HackerEarth",
+      "National Circuit (SIH / Corporate)",
+      "Major League Hacking (MLH)",
+    ],
     timestamp: new Date().toISOString(),
   };
 

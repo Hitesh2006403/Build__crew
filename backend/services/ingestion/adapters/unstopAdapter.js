@@ -46,18 +46,27 @@ function parseFee(item) {
 
 export async function fetchUnstopHackathons() {
   const urls = [
-    // Multi-page open hackathons (fetches hundreds of active competitions)
+    // Multi-page open hackathons (fetches all 260+ active competitions)
     "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&per_page=50&page=1&oppstatus=open",
     "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&per_page=50&page=2&oppstatus=open",
     "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&per_page=50&page=3&oppstatus=open",
-    // Targeted Karnataka tech & collegiate hubs
-    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=bangalore&per_page=30&oppstatus=open",
-    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=bengaluru&per_page=30&oppstatus=open",
-    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=karnataka&per_page=30&oppstatus=open",
-    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=mysore&per_page=20&oppstatus=open",
-    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=mangalore&per_page=20&oppstatus=open",
-    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=manipal&per_page=20&oppstatus=open",
-    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=hubli&per_page=20&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&per_page=50&page=4&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&per_page=50&page=5&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&per_page=50&page=6&oppstatus=open",
+    // Competitions with hackathon keywords
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=competitions&searchTerm=hackathon&per_page=50&page=1&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=competitions&searchTerm=bangalore&per_page=50&page=1&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=competitions&searchTerm=karnataka&per_page=50&page=1&oppstatus=open",
+    // Targeted Karnataka tech & collegiate hubs by geo point & keywords
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&location_points=Bangalore&per_page=50&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&location_points=Karnataka&per_page=50&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=bangalore&per_page=50&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=bengaluru&per_page=50&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=karnataka&per_page=50&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=mysore&per_page=30&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=mangalore&per_page=30&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=manipal&per_page=30&oppstatus=open",
+    "https://unstop.com/api/public/opportunity/search-result?opportunity=hackathons&searchTerm=hubli&per_page=30&oppstatus=open",
   ];
 
   const seenIds = new Set();

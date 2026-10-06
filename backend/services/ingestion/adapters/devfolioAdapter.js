@@ -22,10 +22,15 @@ export async function fetchDevfolioHackathons() {
   const queryConfigs = [
     { filter: "open", from: 0, size: 50 },
     { filter: "open", from: 50, size: 50 },
-    { q: "bangalore", from: 0, size: 30 },
-    { q: "bengaluru", from: 0, size: 30 },
-    { q: "karnataka", from: 0, size: 30 },
-    { q: "india", from: 0, size: 30 },
+    { filter: "open", from: 100, size: 50 },
+    { filter: "upcoming", from: 0, size: 50 },
+    { filter: "upcoming", from: 50, size: 50 },
+    { filter: "application_open", from: 0, size: 50 },
+    { filter: "application_open", from: 50, size: 50 },
+    { q: "bangalore", from: 0, size: 40 },
+    { q: "bengaluru", from: 0, size: 40 },
+    { q: "karnataka", from: 0, size: 40 },
+    { q: "india", from: 0, size: 50 },
   ];
 
   const seenSlugs = new Set();
