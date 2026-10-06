@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect } from 'react';
-import HackathonHero from '../components/hackathons/HackathonHero';
 import HackathonCard from '../components/hackathons/HackathonCard';
 import HackathonDetailsModal from '../components/hackathons/HackathonDetailsModal';
 import HackathonSquadUpModal from '../components/hackathons/HackathonSquadUpModal';
@@ -195,29 +194,21 @@ export default function Hackathons({
     dateFilterMode !== 'all' ||
     selectedDate;
 
-  // Active Flagship for Hero Spotlight
-  const flagship = useMemo(() => {
-    return hackathons.find(h => h.isFeatured) || hackathons[0] || null;
-  }, [hackathons]);
-
-  // Overall Counts for Status Tabs matching all 5 lifecycle states
+  // Overall Counts for Status Tabs matching all lifecycle states
   const tabCounts = useMemo(() => {
-    const listWithoutFlagship = hackathons.filter(h => !flagship || (h._id || h.id) !== (flagship._id || flagship.id));
     return {
-      all: listWithoutFlagship.length,
-      open: listWithoutFlagship.filter(h => h.status === 'open').length,
-      'closing-soon': listWithoutFlagship.filter(h => h.status === 'closing-soon').length,
-      upcoming: listWithoutFlagship.filter(h => h.status === 'upcoming').length,
-      closed: listWithoutFlagship.filter(h => h.status === 'closed' || h.status === 'finished').length,
-      'team-full': listWithoutFlagship.filter(h => h.status === 'team-full').length
+      all: hackathons.length,
+      open: hackathons.filter(h => h.status === 'open').length,
+      'closing-soon': hackathons.filter(h => h.status === 'closing-soon').length,
+      upcoming: hackathons.filter(h => h.status === 'upcoming').length,
+      closed: hackathons.filter(h => h.status === 'closed' || h.status === 'finished').length,
+      'team-full': hackathons.filter(h => h.status === 'team-full').length
     };
-  }, [hackathons, flagship]);
+  }, [hackathons]);
 
   // Filtered Hackathons
   const filteredHackathons = useMemo(() => {
     return hackathons.filter(h => {
-      // Exclude flagship from standard list so it's highlighted in the Hero
-      if (flagship && (h._id || h.id) === (flagship._id || flagship.id)) return false;
 
       // Search query (including title, subtitle, location, state, district, circuitId, simpleId)
       if (searchQuery.trim()) {
@@ -346,7 +337,7 @@ export default function Hackathons({
 
   const handleOpenSquadUp = (hackathonOrTitle) => {
     if (typeof hackathonOrTitle === 'string') {
-      const found = hackathons.find(h => h.title.toLowerCase().includes(hackathonOrTitle.toLowerCase())) || flagship;
+      const found = hackathons.find(h => h.title.toLowerCase().includes(hackathonOrTitle.toLowerCase())) || hackathons[0];
       setSquadUpHackathon(found);
     } else {
       setSquadUpHackathon(hackathonOrTitle);
@@ -363,64 +354,24 @@ export default function Hackathons({
   };
 
   return (
-    <div className="flex flex-col w-full pb-space-xl space-y-6">
-      {/* 1. Header Section */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-1.5 text-secondary text-xs font-extrabold uppercase tracking-wider mb-1">
-            <span className="material-symbols-outlined text-base">military_tech</span>
-            <span>Sanctioned Collegiate Circuit</span>
-            <span className="text-outline-variant">•</span>
-            <span className="text-on-surface-variant font-medium">2026–2027 Season</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-on-surface tracking-tight leading-tight">
-            Collegiate Hackathons
-          </h1>
-          <p className="text-xs sm:text-sm text-on-surface-variant mt-1 leading-relaxed max-w-2xl">
-            Sanctioned collegiate hackathons, verified prize bounties, and in-circuit squad matchmaking.
-          </p>
-        </div>
-
-        {/* Action Header Buttons */}
-        <div className="flex items-center gap-2.5 self-start sm:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              if (showToast) showToast('Circuit Schedule synced with your Google Calendar!');
-            }}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-xs font-bold shadow-sm transition-all cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-base text-secondary">calendar_month</span>
-            <span>My Schedule</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setIsSubmitModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary hover:bg-surface-tint active:scale-[0.98] text-on-primary text-xs font-bold shadow-md transition-all cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-base">add_task</span>
-            <span>Submit Hackathon</span>
-          </button>
-        </div>
+    <div className="flex flex-col w-full pb-space-xl space-y-5">
+      {/* 1. Clean, Minimal Header */}
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-black text-on-surface tracking-tight">
+          Hackathons
+        </h1>
+        <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5">
+          Explore ongoing and upcoming collegiate hackathons across Karnataka & National tech circuits.
+        </p>
       </div>
 
-      {/* 2. Flagship Featured Hero Spotlight */}
-      {flagship && (
-        <HackathonHero
-          flagship={flagship}
-          onFindSquad={() => handleOpenSquadUp(flagship)}
-          onOpenDetails={(h) => handleSelectHackathon(h)}
-        />
-      )}
-
-      {/* 3. Streamlined Filter Command Deck */}
-      <div className="bg-surface-container-lowest rounded-2xl p-4 sm:p-5 border border-surface-container-high/80 shadow-sm space-y-3.5">
+      {/* 2. Organized & Streamlined Filter Command Deck */}
+      <div className="bg-surface-container-lowest rounded-2xl p-3.5 sm:p-4 border border-surface-container-high/80 shadow-xs space-y-3">
         {/* Row 1: Search + Status Tabs + View Toggle */}
-        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
           {/* Search Box */}
           <div className="relative flex-1 max-w-md">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg pointer-events-none">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base pointer-events-none">
               search
             </span>
             <input
@@ -442,9 +393,9 @@ export default function Hackathons({
             )}
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
-            {/* Status Tabs with Live Badges */}
-            <div className="flex items-center gap-1 p-1 bg-surface-container-low rounded-xl overflow-x-auto shrink-0">
+          {/* Status Tabs + View Mode Toggle */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+            <div className="flex items-center gap-1 p-1 bg-surface-container-low rounded-xl shrink-0">
               {[
                 { id: 'all', label: 'All', count: tabCounts.all },
                 { id: 'open', label: 'Registration open', count: tabCounts.open },
@@ -459,7 +410,7 @@ export default function Hackathons({
                   onClick={() => setStatusTab(tab.id)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                     statusTab === tab.id
-                      ? 'bg-surface-container-lowest text-on-surface shadow-sm'
+                      ? 'bg-surface-container-lowest text-on-surface shadow-xs'
                       : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
@@ -473,7 +424,6 @@ export default function Hackathons({
               ))}
             </div>
 
-            {/* View Mode Toggle */}
             <div className="hidden sm:flex items-center gap-1 p-1 bg-surface-container-low rounded-xl shrink-0">
               <button
                 type="button"
@@ -481,7 +431,7 @@ export default function Hackathons({
                 title="Grid View"
                 className={`p-1.5 rounded-lg transition-all cursor-pointer ${
                   viewMode === 'grid'
-                    ? 'bg-surface-container-lowest text-secondary shadow-sm'
+                    ? 'bg-surface-container-lowest text-secondary shadow-xs'
                     : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
@@ -493,7 +443,7 @@ export default function Hackathons({
                 title="List View"
                 className={`p-1.5 rounded-lg transition-all cursor-pointer ${
                   viewMode === 'list'
-                    ? 'bg-surface-container-lowest text-secondary shadow-sm'
+                    ? 'bg-surface-container-lowest text-secondary shadow-xs'
                     : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
@@ -503,29 +453,24 @@ export default function Hackathons({
           </div>
         </div>
 
-        {/* Row 2: Date & Timeline Selection (Enlarged & Prominent) */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-3.5 border-t border-surface-container-high/60">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black uppercase tracking-wider text-on-surface mr-1 shrink-0">
-              <span className="material-symbols-outlined text-base sm:text-lg text-secondary">calendar_today</span>
-              <span>Date Filter:</span>
-            </div>
-
-            {/* Date classification pills (Enlarged) */}
-            <div className="inline-flex items-center gap-1.5 p-1 bg-surface-container-low rounded-xl">
+        {/* Row 2: Unified Filter Controls Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-surface-container-high/60">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Date classification pills */}
+            <div className="inline-flex items-center gap-1 p-0.5 bg-surface-container-low rounded-xl">
               {[
                 { id: 'all', label: 'All Dates' },
-                { id: 'this-month', label: '● This Month (Ongoing)' },
-                { id: 'upcoming', label: 'Upcoming (Next Months)' },
+                { id: 'this-month', label: '● This Month' },
+                { id: 'upcoming', label: 'Upcoming' },
               ].map((df) => (
                 <button
                   key={df.id}
                   type="button"
                   onClick={() => setDateFilterMode(df.id)}
-                  className={`px-4 py-2 sm:px-4.5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                     dateFilterMode === df.id
-                      ? 'bg-surface-container-lowest text-secondary shadow-sm ring-1 ring-secondary/30'
-                      : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'
+                      ? 'bg-surface-container-lowest text-secondary shadow-xs'
+                      : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
                   {df.label}
@@ -533,311 +478,308 @@ export default function Hackathons({
               ))}
             </div>
 
-            {/* Date picker: Past dates in month cannot be selected (min={todayFormatted}) */}
-            <div className="relative flex items-center gap-2 bg-surface-container-low border border-surface-container-high/90 focus-within:border-secondary rounded-xl px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-xs">
-              <span className="material-symbols-outlined text-base sm:text-lg text-secondary pointer-events-none">event</span>
+            {/* Date Picker Input */}
+            <div className="relative flex items-center gap-1.5 bg-surface-container-low border border-surface-container-high/80 rounded-xl px-2.5 py-1 text-xs">
+              <span className="material-symbols-outlined text-sm text-secondary">event</span>
               <input
                 type="date"
                 min={todayFormatted}
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                title="Filter by date (past dates in month are disabled)"
-                className="bg-transparent text-xs sm:text-sm font-bold text-on-surface outline-none cursor-pointer"
+                title="Filter by date (past dates in month disabled)"
+                className="bg-transparent text-xs font-bold text-on-surface outline-none cursor-pointer"
               />
               {selectedDate && (
                 <button
                   type="button"
                   onClick={() => setSelectedDate('')}
                   title="Clear Date"
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
+                  className="text-on-surface-variant hover:text-on-surface cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-sm">cancel</span>
+                  <span className="material-symbols-outlined text-xs">cancel</span>
                 </button>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* Row 3: State & District Location Classification (Enlarged & Strictly Accurate) */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-3.5 border-t border-surface-container-high/60">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black uppercase tracking-wider text-on-surface mr-1 shrink-0">
-              <span className="material-symbols-outlined text-base sm:text-lg text-amber-400">location_on</span>
-              <span>Location:</span>
-            </div>
-
-            {/* State Search Autocomplete */}
+            {/* State Popover Selector */}
             <div className="relative">
-              <div className="flex items-center gap-2 bg-surface-container-low border border-surface-container-high/90 focus-within:border-secondary rounded-xl px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-xs">
-                <span className="material-symbols-outlined text-base sm:text-lg text-secondary">map</span>
-                <input
-                  type="text"
-                  placeholder="State (e.g. Karnataka, A)..."
-                  value={selectedState || stateInput}
-                  onChange={(e) => {
-                    setSelectedState('');
-                    setStateInput(e.target.value);
-                    setIsStateDropdownOpen(true);
-                  }}
-                  onFocus={() => setIsStateDropdownOpen(true)}
-                  className="bg-transparent outline-none text-xs sm:text-sm text-on-surface placeholder:text-on-surface-variant w-44 sm:w-56 font-bold"
-                />
-                {(selectedState || stateInput) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedState('');
-                      setStateInput('');
-                      setIsStateDropdownOpen(false);
-                    }}
-                    className="w-5 h-5 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsStateDropdownOpen(prev => !prev);
+                  setIsDistrictDropdownOpen(false);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  selectedState
+                    ? 'bg-secondary/15 text-secondary border-secondary/40'
+                    : 'bg-surface-container-low text-on-surface border-surface-container-high/80 hover:border-secondary/40'
+                }`}
+              >
+                <span className="material-symbols-outlined text-sm text-secondary">map</span>
+                <span>{selectedState || 'State'}</span>
+                <span className="material-symbols-outlined text-xs text-on-surface-variant">arrow_drop_down</span>
+              </button>
 
-              {/* State Suggestions Dropdown */}
               {isStateDropdownOpen && (
                 <>
-                  <div
-                    className="fixed inset-0 z-20"
-                    onClick={() => setIsStateDropdownOpen(false)}
-                  />
-                  <div className="absolute left-0 top-full mt-1.5 w-64 sm:w-72 max-h-64 overflow-y-auto bg-surface-container-lowest border border-surface-container-high rounded-2xl shadow-2xl z-30 p-1.5 space-y-1">
-                    <div className="px-3 py-1.5 text-[11px] font-black text-outline uppercase tracking-wider">
-                      Suggested States ({stateSuggestions.length})
+                  <div className="fixed inset-0 z-20" onClick={() => setIsStateDropdownOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1.5 w-64 max-h-64 overflow-hidden bg-surface-container-lowest border border-surface-container-high rounded-2xl shadow-xl z-30 flex flex-col p-2">
+                    <div className="mb-1">
+                      <input
+                        type="text"
+                        placeholder="Type alphabet (e.g. 'A', 'K')..."
+                        value={stateInput}
+                        onChange={(e) => setStateInput(e.target.value)}
+                        autoFocus
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-surface-container-low border border-surface-container-high text-xs font-semibold outline-none focus:border-secondary"
+                      />
                     </div>
-                    {stateSuggestions.map((st) => (
+                    <div className="overflow-y-auto max-h-48 space-y-0.5">
                       <button
-                        key={st}
-                        type="button"
-                        onClick={() => handleSelectState(st)}
-                        className={`w-full text-left px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold cursor-pointer transition-colors flex items-center justify-between ${
-                          selectedState === st
-                            ? 'bg-secondary text-on-secondary shadow-xs'
-                            : 'text-on-surface hover:bg-surface-container-high'
-                        }`}
-                      >
-                        <span>{st}</span>
-                        {selectedState === st && (
-                          <span className="material-symbols-outlined text-sm">check</span>
-                        )}
-                      </button>
-                    ))}
-                    {stateSuggestions.length === 0 && (
-                      <div className="px-3 py-3 text-center text-xs font-semibold text-on-surface-variant">
-                        No state matching '{stateInput}'
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* District Search Autocomplete */}
-            <div className="relative">
-              <div className="flex items-center gap-2 bg-surface-container-low border border-surface-container-high/90 focus-within:border-secondary rounded-xl px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-xs">
-                <span className="material-symbols-outlined text-base sm:text-lg text-amber-400">location_city</span>
-                <input
-                  type="text"
-                  placeholder={selectedState ? `${selectedState} District (e.g. B, M)...` : "District (e.g. Bengaluru, B)..."}
-                  value={selectedDistrict || districtInput}
-                  onChange={(e) => {
-                    setSelectedDistrict('');
-                    setDistrictInput(e.target.value);
-                    setIsDistrictDropdownOpen(true);
-                  }}
-                  onFocus={() => setIsDistrictDropdownOpen(true)}
-                  className="bg-transparent outline-none text-xs sm:text-sm text-on-surface placeholder:text-on-surface-variant w-44 sm:w-60 font-bold"
-                />
-                {(selectedDistrict || districtInput) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedDistrict('');
-                      setDistrictInput('');
-                      setIsDistrictDropdownOpen(false);
-                    }}
-                    className="w-5 h-5 rounded-full flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
-                  >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                )}
-              </div>
-
-              {/* District Suggestions Dropdown */}
-              {isDistrictDropdownOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-20"
-                    onClick={() => setIsDistrictDropdownOpen(false)}
-                  />
-                  <div className="absolute left-0 top-full mt-1.5 w-64 sm:w-72 max-h-64 overflow-y-auto bg-surface-container-lowest border border-surface-container-high rounded-2xl shadow-2xl z-30 p-1.5 space-y-1">
-                    <div className="px-3 py-1.5 text-[11px] font-black text-outline uppercase tracking-wider flex items-center justify-between">
-                      <span>{selectedState ? `${selectedState} Districts` : 'Karnataka Districts'} ({districtSuggestions.length})</span>
-                    </div>
-                    {districtSuggestions.map((dist) => (
-                      <button
-                        key={dist}
                         type="button"
                         onClick={() => {
-                          setSelectedDistrict(dist);
-                          setDistrictInput(dist);
-                          setIsDistrictDropdownOpen(false);
+                          setSelectedState('');
+                          setStateInput('');
+                          setIsStateDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold cursor-pointer transition-colors flex items-center justify-between ${
-                          selectedDistrict === dist
-                            ? 'bg-secondary text-on-secondary shadow-xs'
-                            : 'text-on-surface hover:bg-surface-container-high'
-                        }`}
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-on-surface-variant hover:bg-surface-container-high"
                       >
-                        <span>{dist}</span>
-                        {selectedDistrict === dist && (
-                          <span className="material-symbols-outlined text-sm">check</span>
-                        )}
+                        All States
                       </button>
-                    ))}
-                    {districtSuggestions.length === 0 && (
-                      <div className="px-3 py-3 text-center text-xs font-semibold text-on-surface-variant">
-                        {selectedState === 'Karnataka' || !selectedState
-                          ? `No Karnataka district matching '${districtInput}'`
-                          : `No district in ${selectedState} matching '${districtInput}'`}
-                      </div>
-                    )}
+                      {stateSuggestions.map(st => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => handleSelectState(st)}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between ${
+                            selectedState === st ? 'bg-secondary text-on-secondary' : 'text-on-surface hover:bg-surface-container-high'
+                          }`}
+                        >
+                          <span>{st}</span>
+                          {selectedState === st && <span className="material-symbols-outlined text-xs">check</span>}
+                        </button>
+                      ))}
+                      {stateSuggestions.length === 0 && (
+                        <div className="px-3 py-2 text-center text-xs text-on-surface-variant">
+                          No matching state
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* Row 4: Tracks Filters, Format Selector & Sorting (Enlarged) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3.5 border-t border-surface-container-high/60">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-outline mr-1 flex items-center gap-1">
-              <span className="material-symbols-outlined text-base">interests</span>
-              <span>Tracks:</span>
-            </span>
-            {[
-              { id: 'ai', label: 'AI & Agents' },
-              { id: 'web3', label: 'Web3 & ZK' },
-              { id: 'fintech', label: 'FinTech' },
-              { id: 'healthtech', label: 'HealthTech' },
-              { id: 'climate', label: 'Climate' }
-            ].map((track) => {
-              const isSelected = activeTracks.includes(track.id);
-              return (
-                <button
-                  key={track.id}
-                  type="button"
-                  onClick={() => toggleTrack(track.id)}
-                  className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                    isSelected
-                      ? 'bg-secondary text-on-secondary shadow-sm'
-                      : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                  }`}
-                >
-                  {track.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Format Select */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-outline text-xs sm:text-sm font-bold">Format:</span>
-              <select
-                value={activeMode}
-                onChange={(e) => setActiveMode(e.target.value)}
-                className="bg-surface-container-low px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold text-on-surface outline-none cursor-pointer border border-surface-container-high/80"
+            {/* District Popover Selector */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDistrictDropdownOpen(prev => !prev);
+                  setIsStateDropdownOpen(false);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  selectedDistrict
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40'
+                    : 'bg-surface-container-low text-on-surface border-surface-container-high/80 hover:border-amber-400/40'
+                }`}
               >
-                <option value="all">All Formats</option>
-                <option value="online">Online</option>
-                <option value="in-person">Offline / In-Person</option>
-                <option value="hybrid">Hybrid</option>
-              </select>
+                <span className="material-symbols-outlined text-sm text-amber-400">location_city</span>
+                <span>{selectedDistrict || 'District'}</span>
+                <span className="material-symbols-outlined text-xs text-on-surface-variant">arrow_drop_down</span>
+              </button>
+
+              {isDistrictDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-20" onClick={() => setIsDistrictDropdownOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1.5 w-64 max-h-64 overflow-hidden bg-surface-container-lowest border border-surface-container-high rounded-2xl shadow-xl z-30 flex flex-col p-2">
+                    <div className="mb-1">
+                      <input
+                        type="text"
+                        placeholder={selectedState ? `Filter ${selectedState} district...` : "Type alphabet (e.g. 'B', 'M')..."}
+                        value={districtInput}
+                        onChange={(e) => setDistrictInput(e.target.value)}
+                        autoFocus
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-surface-container-low border border-surface-container-high text-xs font-semibold outline-none focus:border-secondary"
+                      />
+                    </div>
+                    <div className="px-2 py-0.5 text-[10px] font-black uppercase text-outline">
+                      {selectedState ? `${selectedState} Districts` : 'Karnataka Districts (31)'}
+                    </div>
+                    <div className="overflow-y-auto max-h-48 space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedDistrict('');
+                          setDistrictInput('');
+                          setIsDistrictDropdownOpen(false);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-semibold text-on-surface-variant hover:bg-surface-container-high"
+                      >
+                        All Districts
+                      </button>
+                      {districtSuggestions.map(dist => (
+                        <button
+                          key={dist}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDistrict(dist);
+                            setDistrictInput(dist);
+                            setIsDistrictDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between ${
+                            selectedDistrict === dist ? 'bg-secondary text-on-secondary' : 'text-on-surface hover:bg-surface-container-high'
+                          }`}
+                        >
+                          <span>{dist}</span>
+                          {selectedDistrict === dist && <span className="material-symbols-outlined text-xs">check</span>}
+                        </button>
+                      ))}
+                      {districtSuggestions.length === 0 && (
+                        <div className="px-3 py-2 text-center text-xs text-on-surface-variant">
+                          No matching district
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
-            {/* Sort Select */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-outline text-xs sm:text-sm font-bold">Sort:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="bg-surface-container-low px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold text-on-surface outline-none cursor-pointer border border-surface-container-high/80"
-              >
-                <option value="date">Upcoming Date</option>
-                <option value="prize">Highest Prize</option>
-              </select>
+            {/* Tracks Pills */}
+            <div className="hidden xl:flex items-center gap-1">
+              {[
+                { id: 'ai', label: 'AI & ML' },
+                { id: 'web3', label: 'Web3' },
+                { id: 'fintech', label: 'FinTech' },
+                { id: 'healthtech', label: 'Health' },
+              ].map((track) => {
+                const isSelected = activeTracks.includes(track.id);
+                return (
+                  <button
+                    key={track.id}
+                    type="button"
+                    onClick={() => toggleTrack(track.id)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-secondary text-on-secondary shadow-xs'
+                        : 'bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                    }`}
+                  >
+                    {track.label}
+                  </button>
+                );
+              })}
             </div>
+          </div>
+
+          {/* Right: Format, Sort & Reset */}
+          <div className="flex items-center gap-2">
+            <select
+              value={activeMode}
+              onChange={(e) => setActiveMode(e.target.value)}
+              className="bg-surface-container-low px-2.5 py-1.5 rounded-xl text-xs font-bold text-on-surface outline-none cursor-pointer border border-surface-container-high/80"
+            >
+              <option value="all">All Formats</option>
+              <option value="online">Online</option>
+              <option value="in-person">Offline</option>
+              <option value="hybrid">Hybrid</option>
+            </select>
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-surface-container-low px-2.5 py-1.5 rounded-xl text-xs font-bold text-on-surface outline-none cursor-pointer border border-surface-container-high/80"
+            >
+              <option value="date">Upcoming</option>
+              <option value="prize">Highest Prize</option>
+            </select>
 
             {hasActiveFilters && (
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="text-xs sm:text-sm font-black text-secondary hover:text-primary transition-colors flex items-center gap-1 cursor-pointer pl-1"
+                className="text-xs font-bold text-secondary hover:text-primary transition-colors flex items-center gap-0.5 cursor-pointer px-1.5 py-1"
+                title="Reset all filters"
               >
-                <span className="material-symbols-outlined text-base">filter_alt_off</span>
+                <span className="material-symbols-outlined text-sm">filter_alt_off</span>
                 <span>Reset</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Row 5: Active Filter Chips Strip (Enlarged & Clear) */}
-        {(selectedState || selectedDistrict || selectedDate || dateFilterMode !== 'all') && (
-          <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-surface-container-high/60">
-            <span className="text-xs font-black uppercase tracking-wider text-outline mr-1">Active Filters:</span>
+        {/* Row 3: Active Filter Chips Strip */}
+        {(selectedState || selectedDistrict || selectedDate || dateFilterMode !== 'all' || activeTracks.length > 0) && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-surface-container-high/40 text-xs">
+            <span className="text-[10px] uppercase font-bold text-outline mr-1">Active:</span>
             {selectedState && (
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-secondary/15 text-secondary border border-secondary/30 font-bold text-xs sm:text-sm shadow-xs">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-secondary/15 text-secondary border border-secondary/30 font-bold text-[11px]">
                 <span>State: {selectedState}</span>
                 <button
                   type="button"
                   onClick={() => { setSelectedState(''); setStateInput(''); }}
-                  className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-secondary/30 text-secondary hover:text-white cursor-pointer ml-0.5 font-black text-xs"
+                  className="hover:text-white cursor-pointer ml-0.5 font-bold"
                 >
                   ×
                 </button>
               </span>
             )}
             {selectedDistrict && (
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold text-xs sm:text-sm shadow-xs">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold text-[11px]">
                 <span>District: {selectedDistrict}</span>
                 <button
                   type="button"
                   onClick={() => { setSelectedDistrict(''); setDistrictInput(''); }}
-                  className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-amber-500/30 text-amber-300 hover:text-white cursor-pointer ml-0.5 font-black text-xs"
+                  className="hover:text-white cursor-pointer ml-0.5 font-bold"
                 >
                   ×
                 </button>
               </span>
             )}
             {dateFilterMode !== 'all' && (
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-500/15 text-blue-300 border border-blue-500/30 font-bold text-xs sm:text-sm shadow-xs">
-                <span>{dateFilterMode === 'this-month' ? 'This Month (Ongoing)' : 'Upcoming Months'}</span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30 font-bold text-[11px]">
+                <span>{dateFilterMode === 'this-month' ? 'This Month' : 'Upcoming'}</span>
                 <button
                   type="button"
                   onClick={() => setDateFilterMode('all')}
-                  className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-blue-500/30 text-blue-300 hover:text-white cursor-pointer ml-0.5 font-black text-xs"
+                  className="hover:text-white cursor-pointer ml-0.5 font-bold"
                 >
                   ×
                 </button>
               </span>
             )}
             {selectedDate && (
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold text-xs sm:text-sm shadow-xs">
-                <span>From: {selectedDate}</span>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-bold text-[11px]">
+                <span>Date: {selectedDate}</span>
                 <button
                   type="button"
                   onClick={() => setSelectedDate('')}
-                  className="w-4 h-4 rounded-full flex items-center justify-center hover:bg-emerald-500/30 text-emerald-300 hover:text-white cursor-pointer ml-0.5 font-black text-xs"
+                  className="hover:text-white cursor-pointer ml-0.5 font-bold"
                 >
                   ×
                 </button>
               </span>
             )}
+            {activeTracks.map(t => (
+              <span key={t} className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-500/15 text-purple-300 border border-purple-500/30 font-bold text-[11px]">
+                <span className="capitalize">{t}</span>
+                <button
+                  type="button"
+                  onClick={() => toggleTrack(t)}
+                  className="hover:text-white cursor-pointer ml-0.5 font-bold"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="text-[11px] font-bold text-outline hover:text-secondary underline ml-1 cursor-pointer"
+            >
+              Clear all
+            </button>
           </div>
         )}
       </div>
