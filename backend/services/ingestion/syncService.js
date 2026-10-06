@@ -31,7 +31,22 @@ function computeStatus(regDeadlineDate) {
   }
 }
 
-function isEventDurationOver(item, now = Date.now()) {
+export function isEventDurationOver(item, now = Date.now()) {
+  // 1. Check registration deadline: if registration deadline is over, mark as expired
+  if (item.regDeadlineDate) {
+    const regMs = new Date(item.regDeadlineDate).getTime();
+    if (!isNaN(regMs) && regMs < now) return true;
+  }
+  if (
+    item.registrationDeadline &&
+    item.registrationDeadline !== "Rolling Admissions" &&
+    item.registrationDeadline !== "Open"
+  ) {
+    const parsedReg = Date.parse(item.registrationDeadline);
+    if (!isNaN(parsedReg) && parsedReg < now) return true;
+  }
+
+  // 2. Check event end date: if event duration is over, mark as expired
   if (item.endDateRaw) {
     const endMs = new Date(item.endDateRaw).getTime();
     if (!isNaN(endMs) && endMs < now) return true;
@@ -40,10 +55,7 @@ function isEventDurationOver(item, now = Date.now()) {
     const parsed = Date.parse(item.endDate);
     if (!isNaN(parsed) && parsed < now) return true;
   }
-  if (item.regDeadlineDate) {
-    const regMs = new Date(item.regDeadlineDate).getTime();
-    if (!isNaN(regMs) && regMs < now - 24 * 60 * 60 * 1000) return true;
-  }
+
   return false;
 }
 

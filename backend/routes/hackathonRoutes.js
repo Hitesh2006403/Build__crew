@@ -3,12 +3,15 @@ import mongoose from "mongoose";
 import Hackathon from "../models/Hackathon.js";
 import HackathonTeam from "../models/HackathonTeam.js";
 import { authenticateUser, requireAdmin, optionalAuth } from "../middleware/auth.js";
-import { runHackathonIngestion } from "../services/ingestion/syncService.js";
+import { runHackathonIngestion, isEventDurationOver } from "../services/ingestion/syncService.js";
 
 const router = express.Router();
 
+let lastAutoSyncTimestamp = 0;
+const TWELVE_HOURS = 12 * 60 * 60 * 1000;
+
 // GET /api/hackathons - Fetch circuit hackathons
-// Students see only published events; Admins see all hackathons including drafts
+// Students see only published & unexpired events; Admins see all hackathons including drafts
 router.get("/", optionalAuth, async (req, res) => {
   try {
     if (mongoose.connection.readyState !== 1) {
@@ -18,14 +21,64 @@ router.get("/", optionalAuth, async (req, res) => {
     const query = isAdmin ? {} : { isPublished: true };
 
     const hackathons = await Hackathon.find(query).sort({ createdAt: -1 });
-    return res.json(hackathons);
+    const now = Date.now();
+
+    // On-the-fly filter & opportunistic auto-deletion of expired hackathons
+    const activeHackathons = [];
+    const expiredIdsToDelete = [];
+
+    for (const h of hackathons) {
+      if (isEventDurationOver(h, now)) {
+        expiredIdsToDelete.push(h._id);
+      } else {
+        activeHackathons.push(h);
+      }
+    }
+
+    // Asynchronously prune expired records from MongoDB without slowing down response
+    if (expiredIdsToDelete.length > 0) {
+      Hackathon.deleteMany({ _id: { $in: expiredIdsToDelete } })
+        .then((res) => {
+          if (res.deletedCount > 0) {
+            console.log(`[Auto-Prune] Deleted ${res.deletedCount} expired hackathons on GET.`);
+          }
+        })
+        .catch((err) => console.warn("[Auto-Prune] Error:", err.message));
+    }
+
+    // Opportunistic daily background refresh: If last sync was > 12 hours ago, refresh in background
+    if (now - lastAutoSyncTimestamp > TWELVE_HOURS) {
+      lastAutoSyncTimestamp = now;
+      runHackathonIngestion().catch((err) => {
+        console.warn("[Background Daily Sync] Refresh error:", err.message);
+      });
+    }
+
+    return res.json(activeHackathons);
   } catch (err) {
     console.error("Fetch hackathons error:", err);
     return res.status(500).json({ error: "Could not retrieve hackathons.", details: err.message });
   }
 });
 
-// POST /api/hackathons/sync-karnataka - Trigger automated ingestion of Karnataka hackathons
+// GET /api/hackathons/cron-sync - Triggered by Vercel Cron, external monitor, or scheduled webhooks
+router.get("/cron-sync", async (req, res) => {
+  try {
+    console.log("[Cron Sync] Received scheduled cron-sync request...");
+    const stats = await runHackathonIngestion();
+    lastAutoSyncTimestamp = Date.now();
+    return res.json({
+      success: true,
+      message: "Daily multi-platform hackathon sync completed successfully.",
+      stats,
+    });
+  } catch (err) {
+    console.error("[Cron Sync] Error during scheduled sync:", err);
+    return res.status(500).json({ error: "Scheduled cron sync failed.", details: err.message });
+  }
+});
+
+// POST /api/hackathons/sync-karnataka - Manual or webhook trigger for automated ingestion
 router.post("/sync-karnataka", async (req, res) => {
   try {
     const syncSecret = process.env.SYNC_SECRET || "buildcrew_sync_secret_2026";
@@ -34,6 +87,7 @@ router.post("/sync-karnataka", async (req, res) => {
     // Allow if secret key matches (for automated cron / GitHub Actions / webhooks)
     if (headerSecret && headerSecret === syncSecret) {
       const stats = await runHackathonIngestion();
+      lastAutoSyncTimestamp = Date.now();
       return res.json({
         success: true,
         message: "Karnataka hackathon automated sync completed.",
@@ -45,6 +99,7 @@ router.post("/sync-karnataka", async (req, res) => {
     return authenticateUser(req, res, () => {
       requireAdmin(req, res, async () => {
         const stats = await runHackathonIngestion();
+        lastAutoSyncTimestamp = Date.now();
         return res.json({
           success: true,
           message: "Karnataka hackathon automated sync completed.",
