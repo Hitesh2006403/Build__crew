@@ -11,6 +11,10 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, ".env") });
 dotenv.config({ path: path.join(__dirname, "..", ".env") });
 
+import { createServer } from "http";
+import { Server } from "socket.io";
+import jwt from "jsonwebtoken";
+
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import projectRoutes from "./routes/projectRoutes.js";
@@ -19,6 +23,9 @@ import teamRoutes from "./routes/teamRoutes.js";
 import invitationRoutes from "./routes/invitationRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import hackathonRoutes from "./routes/hackathonRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
+import { verifyTeamMembership } from "./utils/teamAuth.js";
+import { saveAndTrimMessage } from "./models/Message.js";
 
 import Project from "./models/Project.js";
 import Hackathon from "./models/Hackathon.js";
@@ -71,6 +78,172 @@ app.use(
 
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true, limit: "15mb" }));
+
+// ---------------------------------------------------------------------------
+// 🔌 HTTP Server & Socket.IO Real-Time Engine
+// ---------------------------------------------------------------------------
+const httpServer = createServer(app);
+const JWT_SECRET = process.env.JWT_SECRET || "buildcrew_super_secret_jwt_key_2026_secure";
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.length === 0 ||
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app") ||
+        origin.startsWith("http://localhost:") ||
+        origin.startsWith("https://localhost:")
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
+    credentials: true,
+  },
+});
+
+app.set("io", io);
+
+// Socket.IO authentication middleware (verifies JWT session)
+io.use(async (socket, next) => {
+  try {
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.replace(/^Bearer\s+/i, "");
+
+    if (!token) {
+      return next(new Error("Authentication error: Missing token"));
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (decoded.id === "admin-founder-env" || decoded._id === "admin-founder-env") {
+      socket.user = {
+        _id: "admin-founder-env",
+        id: "admin-founder-env",
+        email: decoded.email,
+        name: decoded.name || "Administrator",
+        role: "admin",
+      };
+      return next();
+    }
+
+    if (mongoose.connection.readyState === 1) {
+      const user = await User.findById(decoded.id || decoded._id).select("-password");
+      if (user) {
+        socket.user = user;
+        return next();
+      }
+    }
+
+    if (decoded.role) {
+      socket.user = {
+        _id: decoded.id || decoded._id,
+        id: decoded.id || decoded._id,
+        email: decoded.email,
+        name: decoded.name,
+        role: decoded.role,
+      };
+      return next();
+    }
+
+    return next(new Error("Authentication error: User account not found"));
+  } catch (err) {
+    return next(new Error("Authentication error: Invalid or expired session token"));
+  }
+});
+
+// Socket.IO event listeners for Team Chat
+io.on("connection", (socket) => {
+  // Join Team Room (verifies team membership before allowing access)
+  socket.on("join_team", async (data, callback) => {
+    try {
+      const teamId = typeof data === "object" ? data?.teamId : data;
+      if (!teamId) {
+        if (typeof callback === "function") callback({ error: "teamId is required." });
+        return;
+      }
+
+      const authCheck = await verifyTeamMembership(socket.user._id, teamId, socket.user.role);
+      if (!authCheck.valid) {
+        if (typeof callback === "function") {
+          callback({ error: authCheck.error || "Access denied: You are not a member of this team." });
+        }
+        return;
+      }
+
+      socket.join(`team:${teamId}`);
+      if (typeof callback === "function") {
+        callback({ success: true, teamId, teamName: authCheck.teamName });
+      }
+    } catch (err) {
+      console.error("Socket join_team error:", err);
+      if (typeof callback === "function") {
+        callback({ error: "Could not join team room." });
+      }
+    }
+  });
+
+  // Leave Team Room
+  socket.on("leave_team", (data) => {
+    const teamId = typeof data === "object" ? data?.teamId : data;
+    if (teamId) {
+      socket.leave(`team:${teamId}`);
+    }
+  });
+
+  // Send Message (verifies membership, validates text, saves to MongoDB with 500-message limit, broadcasts)
+  socket.on("send_message", async (data, callback) => {
+    try {
+      const { teamId, text } = data || {};
+      if (!teamId) {
+        if (typeof callback === "function") callback({ error: "teamId is required." });
+        return;
+      }
+
+      // Backend security: verify sender's team membership
+      const authCheck = await verifyTeamMembership(socket.user._id, teamId, socket.user.role);
+      if (!authCheck.valid) {
+        if (typeof callback === "function") {
+          callback({ error: authCheck.error || "Access denied: You are not a member of this team." });
+        }
+        return;
+      }
+
+      // Text validation: plain text only, non-empty, max 1000 chars
+      if (!text || typeof text !== "string" || !text.trim()) {
+        if (typeof callback === "function") callback({ error: "Message text cannot be empty." });
+        return;
+      }
+
+      if (text.length > 1000) {
+        if (typeof callback === "function") callback({ error: "Maximum message length is 1000 characters." });
+        return;
+      }
+
+      // Save to MongoDB with Atlas Free storage protection (500 message retention)
+      const savedMessage = await saveAndTrimMessage({
+        teamId,
+        senderId: socket.user._id,
+        text,
+      });
+
+      // Broadcast to all team members in real-time
+      io.to(`team:${teamId}`).emit("new_message", savedMessage);
+
+      if (typeof callback === "function") {
+        callback({ success: true, message: savedMessage });
+      }
+    } catch (err) {
+      console.error("Socket send_message error:", err);
+      if (typeof callback === "function") {
+        callback({ error: "Message could not be sent. Please try again." });
+      }
+    }
+  });
+});
 
 // ---------------------------------------------------------------------------
 // 🔌 MongoDB Connection Helper (Cached for Serverless & Standalone)
@@ -218,6 +391,7 @@ apiRouter.use("/teams", teamRoutes);
 apiRouter.use("/invitations", invitationRoutes);
 apiRouter.use("/notifications", notificationRoutes);
 apiRouter.use("/hackathons", hackathonRoutes);
+apiRouter.use("/chat", chatRoutes);
 
 // 👥 Builders & Squads Endpoints (Synced with MongoDB)
 apiRouter.get("/builders", async (req, res) => {
@@ -289,7 +463,7 @@ app.use((err, req, res, next) => {
 if (!process.env.VERCEL) {
   connectDB()
     .then(() => {
-      app.listen(PORT, () => {
+      httpServer.listen(PORT, () => {
         console.log(`server is running on port ${PORT}`);
 
         // Automated Background Ingestion for Karnataka Hackathons
@@ -314,4 +488,5 @@ if (!process.env.VERCEL) {
     });
 }
 
+export { httpServer, io };
 export default app;

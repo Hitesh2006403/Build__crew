@@ -5,6 +5,7 @@ import Header from './components/Header';
 import CommandPalette from './components/CommandPalette';
 import PostProjectModal from './components/PostProjectModal';
 import QuickApplyModal from './components/QuickApplyModal';
+import TeamChatModal from './components/TeamChatModal';
 
 import DiscoverProjects from './views/DiscoverProjects';
 import ProjectDetails from './views/ProjectDetails';
@@ -31,7 +32,7 @@ import { API_BASE_URL } from './api/client';
 // ROUTE WRAPPERS FOR DIRECT URL ACCESS & BROWSER REFRESH SUPPORT
 // =========================================================================
 
-function ProjectDetailsRoute({ projects, currentUser, onApplySuccess, onViewProfile, showToast }) {
+function ProjectDetailsRoute({ projects, currentUser, onApplySuccess, onViewProfile, showToast, onOpenTeamChat }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const [project, setProject] = useState(() => {
@@ -78,6 +79,39 @@ function ProjectDetailsRoute({ projects, currentUser, onApplySuccess, onViewProf
       onApplySuccess={onApplySuccess}
       onViewProfile={onViewProfile}
       currentUser={currentUser}
+      onOpenTeamChat={onOpenTeamChat}
+    />
+  );
+}
+
+function TeamChatDirectRoute({ projects, hackathonSquads, currentUser, onOpenTeamChat, onSelectProject }) {
+  const { id } = useParams();
+
+  useEffect(() => {
+    if (!id) return;
+    const foundProject = projects.find((p) => String(p._id || p.id) === String(id));
+    const foundHack = hackathonSquads.find((h) => String(h._id || h.id) === String(id));
+    const targetTeam = foundProject || foundHack;
+
+    if (targetTeam) {
+      onOpenTeamChat(targetTeam);
+    } else {
+      projectsApi.getProjectById(id)
+        .then((res) => {
+          const loaded = res?.project || res;
+          if (loaded) onOpenTeamChat(loaded);
+        })
+        .catch(() => {});
+    }
+  }, [id, projects, hackathonSquads, onOpenTeamChat]);
+
+  return (
+    <MyTeamsView
+      currentUser={currentUser}
+      projects={projects}
+      hackathonSquads={hackathonSquads}
+      onSelectProject={onSelectProject}
+      onOpenTeamChat={onOpenTeamChat}
     />
   );
 }
@@ -133,7 +167,7 @@ function AdminHackathonEditRoute(props) {
   );
 }
 
-function MyTeamsView({ currentUser, projects, hackathonSquads, onSelectProject }) {
+function MyTeamsView({ currentUser, projects, hackathonSquads, onSelectProject, onOpenTeamChat }) {
   const currentUserId = String(currentUser?._id || currentUser?.id || '');
   
   const myProjectTeams = useMemo(() => {
@@ -214,6 +248,16 @@ function MyTeamsView({ currentUser, projects, hackathonSquads, onSelectProject }
                   <span className="text-secondary font-semibold">{p.lead?.name || p.createdBy?.name || 'Project Creator'}</span>
                 </div>
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-high/60">
+                  {onOpenTeamChat && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenTeamChat(p)}
+                      className="py-2 px-3.5 rounded-xl bg-secondary/10 hover:bg-secondary/20 text-secondary font-title-sm text-title-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-lg">chat</span>
+                      <span>Team Chat</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => onSelectProject(p)}
@@ -258,6 +302,18 @@ function MyTeamsView({ currentUser, projects, hackathonSquads, onSelectProject }
                   <span className="text-on-surface font-medium">Team Lead</span>
                   <span className="text-secondary font-semibold">{h.lead?.name || h.createdBy?.name || 'Team Lead'}</span>
                 </div>
+                {onOpenTeamChat && (
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-surface-container-high/60">
+                    <button
+                      type="button"
+                      onClick={() => onOpenTeamChat(h)}
+                      className="py-2 px-3.5 rounded-xl bg-secondary/10 hover:bg-secondary/20 text-secondary font-title-sm text-title-sm font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-lg">chat</span>
+                      <span>Team Chat</span>
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -301,6 +357,7 @@ export default function App() {
   const [quickApplyProject, setQuickApplyProject] = useState(null);
   const [isPostProjectOpen, setIsPostProjectOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [chatTeam, setChatTeam] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Toast notification
@@ -1129,6 +1186,7 @@ export default function App() {
                 onApplySuccess={handleApplySuccess}
                 onViewProfile={handleViewProfile}
                 showToast={showToast}
+                onOpenTeamChat={(team) => setChatTeam(team)}
               />
             } />
             <Route path="/create-project" element={
@@ -1178,6 +1236,7 @@ export default function App() {
                 projects={projects}
                 hackathonSquads={hackathonSquads}
                 onSelectProject={handleSelectProject}
+                onOpenTeamChat={(team) => setChatTeam(team)}
               />
             } />
             <Route path="/teams/:id" element={
@@ -1187,6 +1246,16 @@ export default function App() {
                 onApplySuccess={handleApplySuccess}
                 onViewProfile={handleViewProfile}
                 showToast={showToast}
+                onOpenTeamChat={(team) => setChatTeam(team)}
+              />
+            } />
+            <Route path="/teams/:id/chat" element={
+              <TeamChatDirectRoute
+                projects={projects}
+                hackathonSquads={hackathonSquads}
+                currentUser={currentUser}
+                onOpenTeamChat={(team) => setChatTeam(team)}
+                onSelectProject={handleSelectProject}
               />
             } />
             <Route path="/find-teammates" element={
@@ -1463,6 +1532,14 @@ export default function App() {
         isOpen={Boolean(quickApplyProject)}
         onClose={() => setQuickApplyProject(null)}
         onApplySuccess={handleApplySuccess}
+      />
+
+      {/* Team Chat Modal */}
+      <TeamChatModal
+        team={chatTeam}
+        currentUser={currentUser}
+        isOpen={Boolean(chatTeam)}
+        onClose={() => setChatTeam(null)}
       />
 
       {/* Post Project Modal (available via /create-project route or button click) */}

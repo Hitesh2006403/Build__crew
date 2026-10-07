@@ -16,7 +16,8 @@ export default function ProjectDetails({
   onBack, 
   onApplySuccess,
   onViewProfile,
-  currentUser
+  currentUser,
+  onOpenTeamChat
 }) {
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [applyingRole, setApplyingRole] = useState(null);
@@ -336,9 +337,25 @@ export default function ProjectDetails({
               Team
             </h2>
           </div>
-          <span className="px-3 py-1 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold">
-            {currentTeamSize} / {totalCapacity} Members
-          </span>
+          <div className="flex items-center gap-2">
+            {currentUser && onOpenTeamChat && (
+              String(creatorId) === String(currentUser._id) ||
+              confirmedMembers.some((m) => String(m.userId) === String(currentUser._id)) ||
+              currentUser.role === 'admin'
+            ) && (
+              <button
+                type="button"
+                onClick={() => onOpenTeamChat(project)}
+                className="py-1.5 px-3 rounded-xl bg-secondary text-on-secondary font-title-sm text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs hover:bg-secondary/90 active:scale-[0.98]"
+              >
+                <span className="material-symbols-outlined text-sm">chat</span>
+                <span>Team Chat</span>
+              </button>
+            )}
+            <span className="px-3 py-1 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md font-semibold">
+              {currentTeamSize} / {totalCapacity} Members
+            </span>
+          </div>
         </div>
 
         {confirmedMembers.length === 0 ? (
