@@ -24,6 +24,7 @@ export default function Sidebar({
     { id: 'my-applications', label: 'My Applications', icon: 'assignment', badge: pendingApplicationsCount },
     { id: 'invitations', label: 'Invitations', icon: 'mail', badge: pendingInvitationsCount },
     { id: 'my-teams', label: 'My Teams', icon: 'diversity_3' },
+    { id: 'group-chat', label: 'Group Chat', icon: 'forum' },
   ];
 
   const bottomNav = [

@@ -97,6 +97,7 @@ router.put("/:id", authenticateUser, async (req, res) => {
       "profileImage",
       "avatar",
       "roleTitle",
+      "chatUsername",
     ];
 
     const updates = {};

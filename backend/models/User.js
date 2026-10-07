@@ -55,6 +55,11 @@ const userSchema = new mongoose.Schema(
       enum: ["student", "admin"],
       default: "student",
     },
+    chatUsername: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     bio: {
       type: String,
       default: "",

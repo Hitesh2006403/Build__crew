@@ -18,6 +18,7 @@ import Profile from './views/Profile';
 import Auth from './views/Auth';
 import AdminDashboard from './views/AdminDashboard';
 import AccessDenied from './views/AccessDenied';
+import GroupChatView from './views/GroupChatView';
 
 import authApi from './api/auth';
 import projectsApi from './api/projects';
@@ -376,6 +377,7 @@ export default function App() {
     if (pathname.startsWith('/applications')) return 'my-applications';
     if (pathname.startsWith('/invitations')) return 'invitations';
     if (pathname.startsWith('/teams')) return 'my-teams';
+    if (pathname.startsWith('/group-chat') || pathname.startsWith('/chats')) return 'group-chat';
     if (pathname.startsWith('/settings')) return 'settings';
     if (pathname.startsWith('/profile')) return 'profile';
     return 'discover-projects';
@@ -785,6 +787,11 @@ export default function App() {
       case 'my-teams':
       case 'teams':
         navigate('/teams');
+        break;
+      case 'group-chat':
+      case 'chat':
+      case 'chats':
+        navigate('/group-chat');
         break;
       case 'settings':
         navigate('/settings');
@@ -1256,6 +1263,20 @@ export default function App() {
                 currentUser={currentUser}
                 onOpenTeamChat={(team) => setChatTeam(team)}
                 onSelectProject={handleSelectProject}
+              />
+            } />
+            <Route path="/group-chat" element={
+              <GroupChatView
+                currentUser={currentUser}
+                onUpdateUser={handleUpdateUser}
+                showToast={showToast}
+              />
+            } />
+            <Route path="/group-chat/:groupId" element={
+              <GroupChatView
+                currentUser={currentUser}
+                onUpdateUser={handleUpdateUser}
+                showToast={showToast}
               />
             } />
             <Route path="/find-teammates" element={

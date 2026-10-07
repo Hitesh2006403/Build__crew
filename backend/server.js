@@ -24,8 +24,9 @@ import invitationRoutes from "./routes/invitationRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import hackathonRoutes from "./routes/hackathonRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
-import { verifyTeamMembership } from "./utils/teamAuth.js";
+import { verifyTeamMembership, verifyGroupMembership } from "./utils/teamAuth.js";
 import { saveAndTrimMessage } from "./models/Message.js";
+import ChatGroup from "./models/ChatGroup.js";
 
 import Project from "./models/Project.js";
 import Hackathon from "./models/Hackathon.js";
@@ -238,6 +239,109 @@ io.on("connection", (socket) => {
       }
     } catch (err) {
       console.error("Socket send_message error:", err);
+      if (typeof callback === "function") {
+        callback({ error: "Message could not be sent. Please try again." });
+      }
+    }
+  });
+
+  // Join user's personal notification room
+  if (socket.user?._id) {
+    socket.join(`user:${socket.user._id}`);
+  }
+
+  // Join Group Room (verifies group membership)
+  socket.on("join_group", async (data, callback) => {
+    try {
+      const groupId = typeof data === "object" ? data?.groupId : data;
+      if (!groupId) {
+        if (typeof callback === "function") callback({ error: "groupId is required." });
+        return;
+      }
+
+      const authCheck = await verifyGroupMembership(socket.user._id, groupId, socket.user.role);
+      if (!authCheck.valid) {
+        if (typeof callback === "function") {
+          callback({ error: authCheck.error || "Access denied: You are not a member of this chat group." });
+        }
+        return;
+      }
+
+      socket.join(`group:${groupId}`);
+      if (typeof callback === "function") {
+        callback({ success: true, groupId, groupName: authCheck.group?.name });
+      }
+    } catch (err) {
+      console.error("Socket join_group error:", err);
+      if (typeof callback === "function") callback({ error: "Could not join group room." });
+    }
+  });
+
+  // Leave Group Room
+  socket.on("leave_group", (data) => {
+    const groupId = typeof data === "object" ? data?.groupId : data;
+    if (groupId) {
+      socket.leave(`group:${groupId}`);
+    }
+  });
+
+  // Send Group Message (verifies membership, validates text, saves with 500-message limit, broadcasts)
+  socket.on("send_group_message", async (data, callback) => {
+    try {
+      const { groupId, text } = data || {};
+      if (!groupId) {
+        if (typeof callback === "function") callback({ error: "groupId is required." });
+        return;
+      }
+
+      // Security: verify group membership
+      const authCheck = await verifyGroupMembership(socket.user._id, groupId, socket.user.role);
+      if (!authCheck.valid) {
+        if (typeof callback === "function") {
+          callback({ error: authCheck.error || "Access denied: You are not a member of this chat group." });
+        }
+        return;
+      }
+
+      // Strictly plain text only: max 1000 chars, no files, no stickers, no gifs
+      if (!text || typeof text !== "string" || !text.trim()) {
+        if (typeof callback === "function") callback({ error: "Message text cannot be empty." });
+        return;
+      }
+
+      if (text.length > 1000) {
+        if (typeof callback === "function") callback({ error: "Maximum message length is 1000 characters." });
+        return;
+      }
+
+      // Persist to MongoDB with 500-message retention & 30-day TTL protection
+      const savedMessage = await saveAndTrimMessage({
+        groupId,
+        senderId: socket.user._id,
+        text,
+      });
+
+      // Update lastMessage on ChatGroup
+      await ChatGroup.findByIdAndUpdate(groupId, {
+        lastMessage: {
+          text: text.trim().slice(0, 100),
+          senderName: socket.user.name,
+          senderUsername: socket.user.chatUsername || "",
+          createdAt: savedMessage.createdAt || new Date(),
+        },
+      });
+
+      // Broadcast to all group members in real-time
+      io.to(`group:${groupId}`).emit("new_group_message", {
+        groupId,
+        message: savedMessage,
+      });
+
+      if (typeof callback === "function") {
+        callback({ success: true, message: savedMessage });
+      }
+    } catch (err) {
+      console.error("Socket send_group_message error:", err);
       if (typeof callback === "function") {
         callback({ error: "Message could not be sent. Please try again." });
       }
