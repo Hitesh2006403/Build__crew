@@ -346,7 +346,7 @@ export default function Auth({ onLoginSuccess, initialMode = 'login', onModeChan
               BuildCrew
             </span>
             <span className="font-label-sm text-[11px] text-on-surface-variant">
-              Campus Collab Engine
+              Student Project &amp; Hackathon Platform
             </span>
           </div>
         </div>
@@ -391,12 +391,42 @@ export default function Auth({ onLoginSuccess, initialMode = 'login', onModeChan
           {/* ======================================================== */}
           {authMode === 'login' && (
             <div>
-              <div className="mb-5">
-                <h1 className="text-2xl font-black text-on-surface tracking-tight">
+              {/* Point 6: Explain BuildCrew before sign-in with student journey & 3 short steps */}
+              <div className="mb-5 p-4 rounded-2xl bg-surface-container-low border border-surface-container-high/60 space-y-3">
+                <p className="text-xs font-bold text-on-surface leading-snug">
+                  Find a student project or hackathon team. Apply, meet teammates, and build together.
+                </p>
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-surface-container-high/40 text-center">
+                  <div className="flex flex-col items-center">
+                    <span className="w-6 h-6 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[11px] mb-1">
+                      1
+                    </span>
+                    <span className="font-bold text-[11px] text-on-surface">Discover</span>
+                    <span className="text-[10px] text-on-surface-variant leading-tight">Find projects</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-[11px] mb-1">
+                      2
+                    </span>
+                    <span className="font-bold text-[11px] text-on-surface">Connect</span>
+                    <span className="text-[10px] text-on-surface-variant leading-tight">Meet teammates</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <span className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[11px] mb-1">
+                      3
+                    </span>
+                    <span className="font-bold text-[11px] text-on-surface">Build</span>
+                    <span className="text-[10px] text-on-surface-variant leading-tight">Build together</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <h1 className="text-xl font-black text-on-surface tracking-tight">
                   Sign In
                 </h1>
-                <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
-                  Access campus projects, squads, and hackathons with your credentials.
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  Access your projects, teams, and hackathons.
                 </p>
               </div>
 
@@ -557,7 +587,7 @@ export default function Auth({ onLoginSuccess, initialMode = 'login', onModeChan
                   Create Account
                 </h1>
                 <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
-                  Create your student profile to discover campus projects and join hackathon squads.
+                  Create your student profile to discover campus projects and join hackathon teams.
                 </p>
               </div>
 

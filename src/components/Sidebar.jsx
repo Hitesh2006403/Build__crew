@@ -20,15 +20,17 @@ export default function Sidebar({
   ];
 
   const myWorkNav = [
-    { id: 'my-projects', label: 'My Projects', icon: 'rocket_launch' },
-    { id: 'my-applications', label: 'My Applications', icon: 'assignment', badge: pendingApplicationsCount },
-    { id: 'invitations', label: 'Invitations', icon: 'mail', badge: pendingInvitationsCount },
     { id: 'my-teams', label: 'My Teams', icon: 'diversity_3' },
-    { id: 'group-chat', label: 'Group Chat', icon: 'forum' },
+    { 
+      id: 'activity-requests', 
+      label: 'Activity & Requests', 
+      icon: 'assignment', 
+      badge: (pendingApplicationsCount || 0) + (pendingInvitationsCount || 0) 
+    },
+    { id: 'group-chat', label: 'Team Chat', icon: 'forum' },
   ];
 
   const bottomNav = [
-    { id: 'settings', label: 'Settings', icon: 'settings' },
     { id: 'profile', label: 'Profile', icon: 'account_circle' },
   ];
 
@@ -161,12 +163,14 @@ export default function Sidebar({
                 My Work
               </div>
               {myWorkNav.map((item) => {
-                const isActive = activeView === item.id;
+                const isActive = activeView === item.id ||
+                  (item.id === 'my-teams' && (activeView === 'my-projects' || activeView === 'my-teams')) ||
+                  (item.id === 'activity-requests' && (activeView === 'my-applications' || activeView === 'invitations' || activeView === 'applications' || activeView === 'activity-requests'));
                 return (
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => handleNavClick(item.id)}
+                    onClick={() => handleNavClick(item.id === 'activity-requests' ? 'my-applications' : item.id)}
                     className={`w-full flex items-center justify-between px-space-md py-2 rounded-xl transition-all font-title-sm text-title-sm text-left ${
                       isActive
                         ? 'bg-surface-container text-on-surface font-semibold shadow-sm'

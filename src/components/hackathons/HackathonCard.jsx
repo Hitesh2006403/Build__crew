@@ -200,6 +200,16 @@ export default function HackathonCard({
   const isClosingSoon = hackathon.status === 'closing-soon';
   const isUpcoming = hackathon.status === 'upcoming';
   const isTeamFull = hackathon.status === 'team-full';
+  // Point 12: Detect solo events to hide Build a Team
+  const isSolo = Boolean(
+    hackathon.isSolo ||
+    hackathon.participationType === 'individual' ||
+    (hackathon.maxTeamSize === 1 && hackathon.minTeamSize === 1) ||
+    String(hackathon.squadLimits || hackathon.teamSize || '').toLowerCase().includes('individual only') ||
+    String(hackathon.squadLimits || hackathon.teamSize || '').trim() === '1' ||
+    String(hackathon.squadLimits || hackathon.teamSize || '').toLowerCase() === '1 member' ||
+    String(hackathon.squadLimits || hackathon.teamSize || '').toLowerCase() === 'solo'
+  );
 
   // Simplified Hackathon ID: e.g. #HK-01, #HK-02
   const simpleId =
@@ -350,7 +360,7 @@ export default function HackathonCard({
             View Details
           </button>
 
-          {!isConcluded && (
+          {!isConcluded && !isSolo && (
             <button
               type="button"
               onClick={() => onFindSquad(hackathon)}
@@ -407,7 +417,11 @@ export default function HackathonCard({
             <div className="relative z-10 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="px-2.5 py-0.5 rounded-full bg-black/60 text-white text-[11px] font-extrabold uppercase tracking-wide border border-white/20 backdrop-blur-md flex items-center gap-1">
-                  <span className="material-symbols-outlined text-xs text-amber-300">verified</span>
+                  {hackathon.isVerified ? (
+                    <span className="material-symbols-outlined text-xs text-amber-300" title="Verified event">verified</span>
+                  ) : (
+                    <span className="material-symbols-outlined text-xs text-slate-300">tag</span>
+                  )}
                   <span>{simpleId}</span>
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white text-[11px] font-semibold border border-white/20 backdrop-blur-md capitalize">
@@ -473,7 +487,11 @@ export default function HackathonCard({
             <div className="relative z-10 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white text-[11px] font-extrabold uppercase tracking-wide border border-white/15 backdrop-blur-md flex items-center gap-1">
-                  <span className="material-symbols-outlined text-xs text-amber-300">verified</span>
+                  {hackathon.isVerified ? (
+                    <span className="material-symbols-outlined text-xs text-amber-300" title="Verified event">verified</span>
+                  ) : (
+                    <span className="material-symbols-outlined text-xs text-slate-300">tag</span>
+                  )}
                   <span>{simpleId}</span>
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white text-[11px] font-semibold border border-white/15 backdrop-blur-md capitalize flex items-center gap-1">
@@ -482,7 +500,7 @@ export default function HackathonCard({
                   </span>
                   <span>{hackathon.mode || 'Hybrid'}</span>
                 </span>
-                {hackathon.district && (
+                {hackathon.mode?.toLowerCase() !== 'online' && hackathon.district && (
                   <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-amber-200 text-[11px] font-bold border border-white/15 backdrop-blur-md flex items-center gap-1">
                     <span className="material-symbols-outlined text-xs text-amber-300">location_on</span>
                     <span>{hackathon.district}</span>
@@ -607,6 +625,15 @@ export default function HackathonCard({
           </div>
         </div>
 
+        {/* Source & Verified metadata */}
+        <div className="flex items-center justify-between text-[11px] text-outline px-1 mb-3">
+          <span className="flex items-center gap-1">
+            <span className="material-symbols-outlined text-xs text-secondary">database</span>
+            <span>Source: {hackathon.source || (hackathon.circuitId?.includes('devfolio') ? 'Devfolio' : hackathon.circuitId?.includes('unstop') ? 'Unstop' : 'Community')}</span>
+          </span>
+          <span>Checked: {hackathon.lastCheckedDate ? new Date(hackathon.lastCheckedDate).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Recently'}</span>
+        </div>
+
         {/* Tracks (What are the tracks?) */}
         <div className="flex flex-wrap items-center gap-1.5 mb-3.5">
           {hackathon.trackLabels?.slice(0, 3).map((track, idx) => (
@@ -635,7 +662,7 @@ export default function HackathonCard({
           View Details
         </button>
 
-        {!isConcluded && (
+        {!isConcluded && !isSolo && (
           <button
             type="button"
             onClick={() => onFindSquad(hackathon)}

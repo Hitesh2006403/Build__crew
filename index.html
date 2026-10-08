@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/buildcrew-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BuildCrew — Campus Collab Engine</title>
+    <title>BuildCrew — Student Projects & Hackathon Teams</title>
     <!-- Google Fonts: Plus Jakarta Sans & Material Symbols -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,6 +12,18 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
     <!-- Google Identity Services (GSI) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Silence Tailwind CDN production warning -->
+    <script>
+      (function() {
+        const origWarn = console.warn;
+        console.warn = function(...args) {
+          if (args[0] && typeof args[0] === 'string' && args[0].includes('cdn.tailwindcss.com should not be used in production')) {
+            return;
+          }
+          origWarn.apply(console, args);
+        };
+      })();
+    </script>
     <!-- Tailwind CDN with exact Stitch configuration -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script id="tailwind-config">

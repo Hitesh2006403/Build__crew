@@ -28,6 +28,7 @@ import applicationsApi from './api/applications';
 import invitationsApi from './api/invitations';
 import notificationsApi from './api/notifications';
 import { API_BASE_URL } from './api/client';
+import { getSocket, disconnectSocket } from './utils/socket';
 
 // =========================================================================
 // ROUTE WRAPPERS FOR DIRECT URL ACCESS & BROWSER REFRESH SUPPORT
@@ -388,6 +389,12 @@ export default function App() {
     return 'hackathons';
   }, [pathname]);
 
+  const hasPostedProjects = useMemo(() => {
+    if (!currentUser) return false;
+    const currentUserId = String(currentUser._id || currentUser.id || '');
+    return Array.isArray(projects) && projects.some(p => String(p.createdBy?._id || p.createdBy || '') === currentUserId);
+  }, [projects, currentUser]);
+
   const showToast = useCallback((msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -598,13 +605,13 @@ export default function App() {
       navigate('/dashboard', { replace: true });
       showToast(`Welcome back to campus circuit, ${user.name}!`);
     }
-    await fetchUserData();
-    await fetchHackathons();
-    await fetchProjects();
+    // Load independent post-login data in parallel instead of sequentially.
+    await Promise.allSettled([fetchUserData(), fetchHackathons(), fetchProjects()]);
   };
 
   const handleLogout = () => {
     authApi.logout();
+    try { disconnectSocket(); } catch { /* ignore */ }
     setCurrentUser(null);
     setApplications([]);
     setNotifications([]);
@@ -642,6 +649,17 @@ export default function App() {
       window.removeEventListener('focus', onFocus);
     };
   }, [currentUser, fetchUserData]);
+
+  // Establish authenticated Socket.IO connection as soon as the user session exists,
+  // so team chat rooms can be joined without waiting for the first message.
+  useEffect(() => {
+    if (!currentUser) return;
+    try {
+      getSocket();
+    } catch (err) {
+      console.warn('[Socket.IO] Early connection warning:', err.message);
+    }
+  }, [currentUser]);
 
   // User Profile & Avatar Synchronization
   const handleUpdateUser = (updatedUser) => {
@@ -1219,8 +1237,9 @@ export default function App() {
               <MyApplications
                 applications={applications}
                 currentUser={currentUser}
-                onSelectProjectById={(id) => navigate(`/projects/${id}`)}
+                onSelectProjectById={(id) => navigate(id ? `/projects/${id}` : '/projects')}
                 initialTab={applicationsTab}
+                hasPostedProjects={hasPostedProjects}
                 onTabChange={setApplicationsTab}
                 onUpdateStatus={handleUpdateApplicationStatus}
               />

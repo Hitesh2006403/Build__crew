@@ -22,8 +22,15 @@ export async function verifyTeamMembership(userId, teamId, userRole = "student")
   const userObjectIdStr = String(userId);
   const isAdmin = userRole === "admin";
 
+  // Fetch candidate team docs in parallel instead of sequential waterfall.
+  // Uses lean reads limited to membership fields for speed.
+  const [teamDoc, projectDoc, hackTeamDoc] = await Promise.all([
+    Team.findById(teamId).select("owner members teamName").lean(),
+    Project.findById(teamId).select("createdBy members title").lean(),
+    HackathonTeam.findById(teamId).select("createdBy members teamName title").lean(),
+  ]);
+
   // 1. Check Team model
-  const teamDoc = await Team.findById(teamId);
   if (teamDoc) {
     const isOwner = teamDoc.owner && String(teamDoc.owner) === userObjectIdStr;
     const isMember = Array.isArray(teamDoc.members) && teamDoc.members.some((m) => String(m) === userObjectIdStr);
@@ -54,7 +61,6 @@ export async function verifyTeamMembership(userId, teamId, userRole = "student")
   }
 
   // 2. Check Project model (projects represent collaboration squads)
-  const projectDoc = await Project.findById(teamId);
   if (projectDoc) {
     const isOwner = projectDoc.createdBy && String(projectDoc.createdBy) === userObjectIdStr;
     const isMember = Array.isArray(projectDoc.members) && projectDoc.members.some((m) => String(m) === userObjectIdStr);
@@ -85,7 +91,6 @@ export async function verifyTeamMembership(userId, teamId, userRole = "student")
   }
 
   // 3. Check HackathonTeam model (hackathon squads)
-  const hackTeamDoc = await HackathonTeam.findById(teamId);
   if (hackTeamDoc) {
     const isOwner = hackTeamDoc.createdBy && String(hackTeamDoc.createdBy) === userObjectIdStr;
     const isMember = Array.isArray(hackTeamDoc.members) && hackTeamDoc.members.some((m) => String(m) === userObjectIdStr);
@@ -136,21 +141,65 @@ export async function verifyGroupMembership(userId, groupId, userRole = "student
 
   const group = await ChatGroup.findById(groupId)
     .populate("admin", "name email avatar profileImage chatUsername role roleTitle college university")
-    .populate("members", "name email avatar profileImage chatUsername role roleTitle college university");
+    .populate("members", "name email avatar profileImage chatUsername role roleTitle college university")
+    .lean();
 
   if (!group) {
     return { valid: false, error: "Group not found." };
   }
 
   const isGroupAdmin = group.admin && String(group.admin._id || group.admin) === userObjectIdStr;
-  const isMember = Array.isArray(group.members) && group.members.some((m) => String(m._id || m) === userObjectIdStr);
+  const isMember = Array.isArray(group.members) && group.members.some((m) => m && String(m._id || m) === userObjectIdStr);
 
+  // If user is directly group admin, listed group member, or system admin, grant access
   if (isGroupAdmin || isMember || isAdmin) {
     return {
       valid: true,
       group,
       isGroupAdmin: isGroupAdmin || isAdmin,
     };
+  }
+
+  // Source of truth for team-linked groups: auto-grant legitimate team members not yet in group.members
+  if (group.teamId && mongoose.Types.ObjectId.isValid(group.teamId)) {
+    const linkedTeamId = group.teamId;
+    const [linkedTeam, linkedProject, linkedHackTeam] = await Promise.all([
+      Team.findById(linkedTeamId).select("owner members").lean(),
+      Project.findById(linkedTeamId).select("createdBy members").lean(),
+      HackathonTeam.findById(linkedTeamId).select("createdBy members").lean(),
+    ]);
+    const linkedDoc = linkedTeam || linkedProject || linkedHackTeam;
+    if (linkedDoc) {
+      const ownerId = linkedTeam
+        ? linkedTeam.owner
+        : linkedDoc.createdBy;
+      const isTeamOwner =
+        ownerId && String(ownerId) === userObjectIdStr;
+      const isTeamMember =
+        (Array.isArray(linkedDoc.members) &&
+          linkedDoc.members.some((m) => m && String(m._id || m) === userObjectIdStr));
+      const teamAllows = isTeamOwner || isTeamMember;
+      if (teamAllows) {
+        try {
+          await ChatGroup.findByIdAndUpdate(groupId, {
+            $addToSet: { members: userId },
+          });
+          const joiningUser = await User.findById(userId)
+            .select("name email avatar profileImage chatUsername role roleTitle college university")
+            .lean();
+          if (joiningUser) {
+            group.members = [...(group.members || []), joiningUser];
+          }
+        } catch {
+          // Non-fatal: access is still granted for this request via team membership.
+        }
+        return {
+          valid: true,
+          group,
+          isGroupAdmin: false,
+        };
+      }
+    }
   }
 
   return { valid: false, error: "Access denied: You are not a member of this chat group." };
@@ -285,3 +334,80 @@ export async function getUserFormedTeams(userId) {
 
   return result;
 }
+
+/**
+ * Ensures one team has one clear, canonical conversation (Point 3).
+ * If a canonical group does not yet exist for this team/project, creates it.
+ * Automatically synchronizes eligible team members to group.members.
+ *
+ * @param {string|mongoose.Types.ObjectId} teamId
+ * @returns {Promise<any>}
+ */
+export async function getOrCreateCanonicalGroup(teamId) {
+  if (!teamId || !mongoose.Types.ObjectId.isValid(teamId)) return null;
+
+  const teamObjId = new mongoose.Types.ObjectId(teamId);
+
+  // Check if a group linked to this team already exists
+  let group = await ChatGroup.findOne({ teamId: teamObjId });
+
+  // Look up source team document
+  const [project, hackTeam, customTeam] = await Promise.all([
+    Project.findById(teamObjId).select("title createdBy members").lean(),
+    HackathonTeam.findById(teamObjId).select("teamName title createdBy members").lean(),
+    Team.findById(teamObjId).select("teamName owner members project").lean(),
+  ]);
+
+  const sourceDoc = project || hackTeam || customTeam;
+  if (!sourceDoc) {
+    return group || null;
+  }
+
+  const adminId = project?.createdBy || hackTeam?.createdBy || customTeam?.owner;
+  const rawMembers = project?.members || hackTeam?.members || customTeam?.members || [];
+  const teamName = project?.title || hackTeam?.teamName || hackTeam?.title || customTeam?.teamName || "Team Squad";
+  const teamType = project ? "Project" : hackTeam ? "HackathonTeam" : "Team";
+
+  const allEligibleMemberIds = Array.from(
+    new Set([
+      adminId ? String(adminId) : null,
+      ...rawMembers.map((m) => (m ? String(m._id || m) : null)),
+    ].filter(Boolean))
+  );
+
+  if (!group) {
+    try {
+      group = await ChatGroup.create({
+        name: teamName,
+        description: `Official canonical team conversation for ${teamName}`,
+        teamId: teamObjId,
+        teamName,
+        teamType,
+        admin: adminId,
+        members: allEligibleMemberIds,
+        lastMessage: {
+          text: `Canonical team chat activated for ${teamName}`,
+          senderName: "System",
+          senderUsername: "system",
+          createdAt: new Date(),
+        },
+      });
+    } catch (err) {
+      // In case of race condition creating at the same time
+      group = await ChatGroup.findOne({ teamId: teamObjId });
+    }
+  } else {
+    // Keep members up-to-date with team roster
+    const currentGroupMemberSet = new Set((group.members || []).map((m) => String(m._id || m)));
+    const missingMembers = allEligibleMemberIds.filter((id) => !currentGroupMemberSet.has(id));
+    if (missingMembers.length > 0) {
+      await ChatGroup.findByIdAndUpdate(group._id, {
+        $addToSet: { members: { $in: missingMembers } },
+      });
+      group.members = Array.from(new Set([...group.members.map(String), ...missingMembers]));
+    }
+  }
+
+  return group;
+}
+

@@ -47,11 +47,16 @@ router.get("/", optionalAuth, async (req, res) => {
     }
 
     // Opportunistic daily background refresh: If last sync was > 12 hours ago, refresh in background
+    // Skipped when DISABLE_HACKATHON_SYNC=true (e.g. environments without external network access).
     if (now - lastAutoSyncTimestamp > TWELVE_HOURS) {
       lastAutoSyncTimestamp = now;
-      runHackathonIngestion().catch((err) => {
-        console.warn("[Background Daily Sync] Refresh error:", err.message);
-      });
+      if (process.env.DISABLE_HACKATHON_SYNC === "true") {
+        console.log("[Background Daily Sync] Skipped (DISABLE_HACKATHON_SYNC=true).");
+      } else {
+        runHackathonIngestion().catch((err) => {
+          console.warn("[Background Daily Sync] Refresh error:", err.message);
+        });
+      }
     }
 
     return res.json(activeHackathons);
@@ -64,6 +69,16 @@ router.get("/", optionalAuth, async (req, res) => {
 // GET /api/hackathons/cron-sync - Triggered by Vercel Cron, external monitor, or scheduled webhooks
 router.get("/cron-sync", async (req, res) => {
   try {
+    // Allows disabling external sync in environments without outbound network
+    // access. Returns success+skipped (HTTP 200) so cron monitors don't alarm.
+    if (process.env.DISABLE_HACKATHON_SYNC === "true") {
+      console.log("[Cron Sync] Skipped (DISABLE_HACKATHON_SYNC=true).");
+      return res.json({
+        success: true,
+        skipped: true,
+        message: "Hackathon sync is disabled via DISABLE_HACKATHON_SYNC.",
+      });
+    }
     console.log("[Cron Sync] Received scheduled cron-sync request...");
     const stats = await runHackathonIngestion();
     lastAutoSyncTimestamp = Date.now();

@@ -30,6 +30,30 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Per-recipient delivery & read receipts tracking (Point 4)
+    recipients: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        delivered: {
+          type: Boolean,
+          default: false,
+        },
+        deliveredAt: {
+          type: Date,
+        },
+        read: {
+          type: Boolean,
+          default: false,
+        },
+        readAt: {
+          type: Date,
+        },
+      },
+    ],
   },
   {
     timestamps: true,
@@ -45,13 +69,14 @@ messageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 })
 messageSchema.index({ conversationId: 1, createdAt: 1 });
 messageSchema.index({ groupId: 1, createdAt: 1 });
 messageSchema.index({ teamId: 1, createdAt: 1 });
+messageSchema.index({ "recipients.userId": 1 });
 
 /**
  * Storage Protection Helper:
  * Saves a new message and enforces the maximum 500 messages per conversation limit.
- * If more than 500 messages exist for this conversation, removes the oldest messages and retains the newest 500.
+ * Populates snapshot recipients at send time (Point 4).
  */
-export async function saveAndTrimMessage({ teamId, groupId, senderId, text }) {
+export async function saveAndTrimMessage({ teamId, groupId, senderId, text, recipientIds = [] }) {
   if (!text || typeof text !== "string") {
     throw new Error("Message text is required.");
   }
@@ -66,6 +91,70 @@ export async function saveAndTrimMessage({ teamId, groupId, senderId, text }) {
 
   const convId = groupId ? String(groupId) : String(teamId);
 
+  // Derive initial recipients snapshot: all team members EXCEPT the sender
+  let recipientsList = [];
+  const senderIdStr = String(senderId);
+
+  if (Array.isArray(recipientIds) && recipientIds.length > 0) {
+    const uniqueIds = Array.from(new Set(recipientIds.map(String))).filter((id) => id !== senderIdStr);
+    recipientsList = uniqueIds.map((uId) => ({
+      userId: uId,
+      delivered: false,
+      read: false,
+    }));
+  } else {
+    try {
+      if (groupId) {
+        const ChatGroup = mongoose.model("ChatGroup");
+        const grp = await ChatGroup.findById(groupId).select("members admin").lean();
+        if (grp) {
+          const allMemberIds = new Set([
+            ...(grp.members || []).map(String),
+            grp.admin ? String(grp.admin) : null,
+          ].filter(Boolean));
+          allMemberIds.delete(senderIdStr);
+          recipientsList = Array.from(allMemberIds).map((uId) => ({
+            userId: uId,
+            delivered: false,
+            read: false,
+          }));
+        }
+      } else if (teamId) {
+        const Project = mongoose.model("Project");
+        const proj = await Project.findById(teamId).select("members createdBy").lean();
+        if (proj) {
+          const allMemberIds = new Set([
+            ...(proj.members || []).map(String),
+            proj.createdBy ? String(proj.createdBy) : null,
+          ].filter(Boolean));
+          allMemberIds.delete(senderIdStr);
+          recipientsList = Array.from(allMemberIds).map((uId) => ({
+            userId: uId,
+            delivered: false,
+            read: false,
+          }));
+        } else {
+          const HackathonTeam = mongoose.model("HackathonTeam");
+          const hTeam = await HackathonTeam.findById(teamId).select("members createdBy").lean();
+          if (hTeam) {
+            const allMemberIds = new Set([
+              ...(hTeam.members || []).map(String),
+              hTeam.createdBy ? String(hTeam.createdBy) : null,
+            ].filter(Boolean));
+            allMemberIds.delete(senderIdStr);
+            recipientsList = Array.from(allMemberIds).map((uId) => ({
+              userId: uId,
+              delivered: false,
+              read: false,
+            }));
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("[Message] Recipient snapshot lookup warning:", e.message);
+    }
+  }
+
   // 1. Persist the new message to MongoDB
   const message = await Message.create({
     teamId: teamId || undefined,
@@ -74,28 +163,29 @@ export async function saveAndTrimMessage({ teamId, groupId, senderId, text }) {
     senderId,
     text: trimmedText,
     read: false,
+    recipients: recipientsList,
   });
 
-  // 2. Check and enforce 500-message ceiling per conversation
-  try {
-    const filter = groupId ? { groupId } : { teamId };
-    const totalCount = await Message.countDocuments(filter);
-    if (totalCount > 500) {
-      const excess = totalCount - 500;
-      const oldestMessages = await Message.find(filter)
-        .sort({ createdAt: 1 })
-        .limit(excess)
-        .select("_id")
-        .lean();
-
-      if (oldestMessages.length > 0) {
-        const idsToDelete = oldestMessages.map((m) => m._id);
-        await Message.deleteMany({ _id: { $in: idsToDelete } });
+  // 2. Enforce 500-message ceiling per conversation without blocking the response.
+  const filter = groupId ? { groupId } : { teamId };
+  Message.countDocuments(filter)
+    .then(async (totalCount) => {
+      if (totalCount > 500) {
+        const excess = totalCount - 500;
+        const oldestMessages = await Message.find(filter)
+          .sort({ createdAt: 1 })
+          .limit(excess)
+          .select("_id")
+          .lean();
+        if (oldestMessages.length > 0) {
+          const idsToDelete = oldestMessages.map((m) => m._id);
+          await Message.deleteMany({ _id: { $in: idsToDelete } });
+        }
       }
-    }
-  } catch (cleanErr) {
-    console.warn("[Storage Protection] Chat message cleanup warning:", cleanErr.message);
-  }
+    })
+    .catch((cleanErr) => {
+      console.warn("[Storage Protection] Chat message cleanup warning:", cleanErr.message);
+    });
 
   // 3. Populate sender information from User model for frontend rendering
   await message.populate("senderId", "name email avatar profileImage chatUsername role roleTitle college university");

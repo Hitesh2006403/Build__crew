@@ -35,11 +35,12 @@ const chatGroupSchema = new mongoose.Schema(
       default: "Project",
     },
     // The team admin who created the group
+    // NOTE: indexed once via chatGroupSchema.index({ admin: 1 }) below.
+    // Do not add `index: true` here or Mongoose logs a duplicate-index warning.
     admin: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-      index: true,
     },
     // Team members added to the group
     members: [

@@ -7,6 +7,7 @@ import {
   verifyTeamMembership,
   verifyGroupMembership,
   getUserFormedTeams,
+  getOrCreateCanonicalGroup,
 } from "../utils/teamAuth.js";
 
 const router = express.Router();
@@ -83,10 +84,22 @@ router.get("/user-teams", authenticateUser, async (req, res) => {
 // 💬 WhatsApp-style Team Chat Groups
 // ---------------------------------------------------------------------------
 
-// GET /api/chat/groups - Returns all groups the current user belongs to or created
+// GET /api/chat/groups - Returns all groups the current user belongs to or created (Point 3: canonical chats)
 router.get("/groups", authenticateUser, async (req, res) => {
   try {
     const userId = req.user._id;
+
+    // Automatically ensure canonical chat group exists for every team user belongs to (Point 3)
+    try {
+      const userTeams = await getUserFormedTeams(userId);
+      for (const t of userTeams || []) {
+        if (t.teamId) {
+          await getOrCreateCanonicalGroup(t.teamId).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn("[Chat] Auto-canonical sync warning:", e.message);
+    }
 
     const groups = await ChatGroup.find({
       $or: [{ members: userId }, { admin: userId }],
@@ -168,10 +181,12 @@ router.post("/groups", authenticateUser, async (req, res) => {
       },
     });
 
-    const populatedGroup = await ChatGroup.findById(newGroup._id)
-      .populate("admin", "name email avatar profileImage chatUsername role roleTitle college university")
-      .populate("members", "name email avatar profileImage chatUsername role roleTitle college university")
-      .lean();
+    // Populate in place (single round-trip) instead of a second findById query.
+    await newGroup.populate([
+      { path: "admin", select: "name email avatar profileImage chatUsername role roleTitle college university" },
+      { path: "members", select: "name email avatar profileImage chatUsername role roleTitle college university" },
+    ]);
+    const populatedGroup = newGroup.toObject();
 
     // Broadcast new group creation to all group members via Socket.IO
     const io = req.app.get("io");
@@ -192,7 +207,7 @@ router.post("/groups", authenticateUser, async (req, res) => {
   }
 });
 
-// GET /api/chat/groups/:groupId/messages - Load messages for a group
+// GET /api/chat/groups/:groupId/messages - Load messages for a group (Point 3: canonical messages)
 router.get("/groups/:groupId/messages", authenticateUser, async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -202,10 +217,15 @@ router.get("/groups/:groupId/messages", authenticateUser, async (req, res) => {
       return res.status(403).json({ error: authCheck.error });
     }
 
-    // Fetch messages for this group (max 500 messages, 30-day TTL index applied)
-    const messages = await Message.find({ groupId })
+    // Canonical matching: if group is linked to a team, retrieve messages sent via teamId or groupId
+    const filter = (authCheck.group && authCheck.group.teamId)
+      ? { $or: [{ groupId }, { teamId: authCheck.group.teamId }] }
+      : { groupId };
+
+    const messages = await Message.find(filter)
       .populate("senderId", "name email avatar profileImage chatUsername role roleTitle college university")
       .sort({ createdAt: 1 })
+      .limit(500)
       .lean();
 
     return res.json({
@@ -221,7 +241,7 @@ router.get("/groups/:groupId/messages", authenticateUser, async (req, res) => {
   }
 });
 
-// POST /api/chat/groups/:groupId/messages - Send text message to group (REST fallback / direct)
+// POST /api/chat/groups/:groupId/messages - Send text message to group (Point 3: canonical, Point 4: receipts)
 router.post("/groups/:groupId/messages", authenticateUser, async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -241,31 +261,45 @@ router.post("/groups/:groupId/messages", authenticateUser, async (req, res) => {
       return res.status(400).json({ error: "Message cannot exceed 1000 characters." });
     }
 
-    // Save with 500-message retention & 30-day TTL storage protection
+    const linkedTeamId = authCheck.group?.teamId;
+    const recipientIds = (authCheck.group?.members || []).map((m) => String(m._id || m));
+
+    // Save with 500-message retention, 30-day TTL storage protection, and snapshot recipients
     const savedMessage = await saveAndTrimMessage({
       groupId,
+      teamId: linkedTeamId || undefined,
       senderId: req.user._id,
       text,
+      recipientIds,
     });
 
-    // Update lastMessage on ChatGroup
-    await ChatGroup.findByIdAndUpdate(groupId, {
+    // Broadcast saved message through WebSocket to all members in that room immediately
+    const io = req.app.get("io");
+    if (io) {
+      const idStr = String(groupId);
+      const rooms = [idStr, `group:${idStr}`, `team:${idStr}`];
+      if (linkedTeamId) {
+        const teamIdStr = String(linkedTeamId);
+        rooms.push(teamIdStr, `group:${teamIdStr}`, `team:${teamIdStr}`);
+      }
+      io.to(rooms).emit("receive-message", savedMessage);
+      io.to(rooms).emit("receive_message", savedMessage);
+      io.to(rooms).emit("new_group_message", {
+        groupId: idStr,
+        chatId: idStr,
+        message: savedMessage,
+      });
+      io.to(rooms).emit("new_message", savedMessage);
+    }
+
+    ChatGroup.findByIdAndUpdate(groupId, {
       lastMessage: {
         text: text.trim().slice(0, 100),
         senderName: req.user.name,
         senderUsername: req.user.chatUsername || "",
         createdAt: savedMessage.createdAt || new Date(),
       },
-    });
-
-    // Broadcast to group room in Socket.IO
-    const io = req.app.get("io");
-    if (io) {
-      io.to(`group:${groupId}`).emit("new_group_message", {
-        groupId,
-        message: savedMessage,
-      });
-    }
+    }).catch((e) => console.warn("[Chat] lastMessage update warning:", e.message));
 
     return res.status(201).json({
       success: true,
@@ -382,7 +416,7 @@ router.put("/groups/:groupId", authenticateUser, async (req, res) => {
 // 📦 Team Chat (Preserved from Previous Version)
 // ---------------------------------------------------------------------------
 
-// GET /api/chat/:teamId/messages - Load existing chat history from MongoDB
+// GET /api/chat/:teamId/messages - Load existing chat history from MongoDB (Point 3: canonical messages)
 router.get("/:teamId/messages", authenticateUser, async (req, res) => {
   try {
     const { teamId } = req.params;
@@ -392,14 +426,23 @@ router.get("/:teamId/messages", authenticateUser, async (req, res) => {
       return res.status(403).json({ error: authCheck.error || "Access denied: You are not a member of this team." });
     }
 
-    const messages = await Message.find({ teamId })
+    // Ensure canonical group exists and link conversation
+    const canonicalGroup = await getOrCreateCanonicalGroup(teamId).catch(() => null);
+
+    const filter = canonicalGroup
+      ? { $or: [{ teamId }, { groupId: canonicalGroup._id }] }
+      : { teamId };
+
+    const messages = await Message.find(filter)
       .populate("senderId", "name email avatar profileImage chatUsername role roleTitle college university")
       .sort({ createdAt: 1 })
+      .limit(500)
       .lean();
 
     return res.json({
       success: true,
       teamId,
+      canonicalGroupId: canonicalGroup?._id || null,
       teamName: authCheck.teamName,
       members: authCheck.members,
       messages,
@@ -410,7 +453,7 @@ router.get("/:teamId/messages", authenticateUser, async (req, res) => {
   }
 });
 
-// POST /api/chat/:teamId/messages - Send text message to team (REST fallback / direct)
+// POST /api/chat/:teamId/messages - Send text message to team (Point 3: canonical, Point 4: receipts)
 router.post("/:teamId/messages", authenticateUser, async (req, res) => {
   try {
     const { teamId } = req.params;
@@ -429,17 +472,46 @@ router.post("/:teamId/messages", authenticateUser, async (req, res) => {
       return res.status(400).json({ error: "Message cannot exceed 1000 characters." });
     }
 
-    // Persist to MongoDB with 500-message retention & 30-day TTL protection
+    const canonicalGroup = await getOrCreateCanonicalGroup(teamId).catch(() => null);
+    const recipientIds = (authCheck.members || []).map((m) => String(m._id || m));
+
+    // Persist to MongoDB with 500-message retention, 30-day TTL protection, and snapshot recipients
     const savedMessage = await saveAndTrimMessage({
       teamId,
+      groupId: canonicalGroup?._id || undefined,
       senderId: req.user._id,
       text,
+      recipientIds,
     });
 
     // Broadcast saved message to other team members via Socket.IO
     const io = req.app.get("io");
     if (io) {
-      io.to(`team:${teamId}`).emit("new_message", savedMessage);
+      const idStr = String(teamId);
+      const rooms = [idStr, `group:${idStr}`, `team:${idStr}`];
+      if (canonicalGroup?._id) {
+        const gStr = String(canonicalGroup._id);
+        rooms.push(gStr, `group:${gStr}`, `team:${gStr}`);
+      }
+      io.to(rooms).emit("receive-message", savedMessage);
+      io.to(rooms).emit("receive_message", savedMessage);
+      io.to(rooms).emit("new_message", savedMessage);
+      io.to(rooms).emit("new_group_message", {
+        groupId: idStr,
+        chatId: idStr,
+        message: savedMessage,
+      });
+    }
+
+    if (canonicalGroup) {
+      ChatGroup.findByIdAndUpdate(canonicalGroup._id, {
+        lastMessage: {
+          text: text.trim().slice(0, 100),
+          senderName: req.user.name,
+          senderUsername: req.user.chatUsername || "",
+          createdAt: savedMessage.createdAt || new Date(),
+        },
+      }).catch((e) => console.warn("[Chat] lastMessage update warning:", e.message));
     }
 
     return res.status(201).json({
@@ -449,6 +521,129 @@ router.post("/:teamId/messages", authenticateUser, async (req, res) => {
   } catch (err) {
     console.error("Send team chat message error:", err);
     return res.status(500).json({ error: "Message could not be sent. Please try again.", details: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 📬 Chat Receipts Endpoints (Point 4: text-only delivery and read tracking)
+// ---------------------------------------------------------------------------
+
+// POST /api/chat/receipts/delivered - Mark messages delivered for current user
+router.post("/receipts/delivered", authenticateUser, async (req, res) => {
+  try {
+    const { messageIds } = req.body;
+    if (!Array.isArray(messageIds) || messageIds.length === 0) {
+      return res.json({ success: true, updatedCount: 0 });
+    }
+
+    const validIds = messageIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    const userId = req.user._id;
+    const now = new Date();
+
+    const messages = await Message.find({
+      _id: { $in: validIds },
+      "recipients.userId": userId,
+      "recipients.delivered": false,
+    });
+
+    const updated = [];
+    for (const msg of messages) {
+      const r = msg.recipients.find((rec) => String(rec.userId) === String(userId));
+      if (r) {
+        r.delivered = true;
+        r.deliveredAt = now;
+        await msg.save();
+        updated.push(msg);
+      }
+    }
+
+    const io = req.app.get("io");
+    if (io && updated.length > 0) {
+      for (const msg of updated) {
+        const convId = msg.conversationId || String(msg.groupId || msg.teamId);
+        const senderIdStr = String(msg.senderId?._id || msg.senderId);
+        const updatePayload = {
+          messageId: String(msg._id),
+          conversationId: convId,
+          recipientId: String(userId),
+          status: "delivered",
+          recipients: msg.recipients,
+        };
+        io.to(`user:${senderIdStr}`).emit("receipt_updated", updatePayload);
+        io.to([convId, `group:${convId}`, `team:${convId}`]).emit("receipt_updated", updatePayload);
+      }
+    }
+
+    return res.json({ success: true, updatedCount: updated.length });
+  } catch (err) {
+    console.error("Delivered receipt error:", err);
+    return res.status(500).json({ error: "Failed to update delivery receipts" });
+  }
+});
+
+// POST /api/chat/receipts/read - Mark messages read for current user
+router.post("/receipts/read", authenticateUser, async (req, res) => {
+  try {
+    const { conversationId, messageIds } = req.body;
+    const userId = req.user._id;
+    const now = new Date();
+
+    let query = {
+      "recipients.userId": userId,
+      "recipients.read": false,
+    };
+
+    if (Array.isArray(messageIds) && messageIds.length > 0) {
+      const validIds = messageIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+      query._id = { $in: validIds };
+    } else if (conversationId) {
+      const convStr = String(conversationId);
+      const isOid = mongoose.Types.ObjectId.isValid(convStr);
+      query.$or = [
+        { conversationId: convStr },
+        isOid ? { groupId: convStr } : null,
+        isOid ? { teamId: convStr } : null,
+      ].filter(Boolean);
+    } else {
+      return res.json({ success: true, updatedCount: 0 });
+    }
+
+    const messages = await Message.find(query);
+    const updated = [];
+
+    for (const msg of messages) {
+      const r = msg.recipients.find((rec) => String(rec.userId) === String(userId));
+      if (r) {
+        r.delivered = true;
+        r.deliveredAt = r.deliveredAt || now;
+        r.read = true;
+        r.readAt = now;
+        await msg.save();
+        updated.push(msg);
+      }
+    }
+
+    const io = req.app.get("io");
+    if (io && updated.length > 0) {
+      for (const msg of updated) {
+        const convId = msg.conversationId || String(msg.groupId || msg.teamId);
+        const senderIdStr = String(msg.senderId?._id || msg.senderId);
+        const updatePayload = {
+          messageId: String(msg._id),
+          conversationId: convId,
+          recipientId: String(userId),
+          status: "read",
+          recipients: msg.recipients,
+        };
+        io.to(`user:${senderIdStr}`).emit("receipt_updated", updatePayload);
+        io.to([convId, `group:${convId}`, `team:${convId}`]).emit("receipt_updated", updatePayload);
+      }
+    }
+
+    return res.json({ success: true, updatedCount: updated.length });
+  } catch (err) {
+    console.error("Read receipt error:", err);
+    return res.status(500).json({ error: "Failed to update read receipts" });
   }
 });
 

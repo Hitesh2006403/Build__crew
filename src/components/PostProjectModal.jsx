@@ -6,7 +6,9 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
   const [whatAreYouBuilding, setWhatAreYouBuilding] = useState('');
   const [category, setCategory] = useState('');
   const [roles, setRoles] = useState([]);
-  const [maximumTeamSize, setMaximumTeamSize] = useState('');
+  const [maximumTeamSize, setMaximumTeamSize] = useState('4');
+  const [neededSkills, setNeededSkills] = useState('');
+  const [expectedCommitment, setExpectedCommitment] = useState('5-10 hrs/week');
   const [expectedCompletionDate, setExpectedCompletionDate] = useState('');
   const [githubRepository, setGithubRepository] = useState('');
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -34,7 +36,9 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
     setWhatAreYouBuilding('');
     setCategory('');
     setRoles([]);
-    setMaximumTeamSize('');
+    setMaximumTeamSize('4');
+    setNeededSkills('');
+    setExpectedCommitment('5-10 hrs/week');
     setExpectedCompletionDate('');
     setGithubRepository('');
     setShowDiscardConfirm(false);
@@ -93,18 +97,27 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
 
     const roleNames = roles.map(r => r.roleName.trim()).filter(Boolean);
     const parsedCapacity = Number(maximumTeamSize) || 4;
+    // Point 10: Accurate seats remaining for vacancies
+    const remainingOpenSeats = Math.max(1, parsedCapacity - 1);
+    const skillsList = neededSkills
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
 
     const vacancies = roles
       .filter(r => r.roleName.trim())
-      .map((r, idx) => ({
-        id: `dev-${Date.now()}-${idx}`,
-        track: 'Core Contributor',
-        title: r.roleName.trim(),
-        seats: `${Number(r.membersCount) || 1} ${Number(r.membersCount) === 1 ? 'seat' : 'seats'} available`,
-        desc: whatAreYouBuilding.trim() || 'Squad member',
-        skills: [],
-        hours: 'Flexible'
-      }));
+      .map((r, idx) => {
+        const roleSeats = Math.max(1, Math.min(Number(r.membersCount) || 1, remainingOpenSeats));
+        return {
+          id: `dev-${Date.now()}-${idx}`,
+          track: 'Core Contributor',
+          title: r.roleName.trim(),
+          seats: `${roleSeats} ${roleSeats === 1 ? 'seat' : 'seats'} available`,
+          desc: whatAreYouBuilding.trim() || 'Team member',
+          skills: skillsList,
+          hours: expectedCommitment
+        };
+      });
 
     const newProject = {
       title: title.trim(),
@@ -126,10 +139,12 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
       publishedTime: 'Just now',
       image: '',
       imageTag: category,
-      techStack: [],
+      techStack: skillsList,
+      commitment: expectedCommitment,
+      expectedCommitment,
       roles: roles.map(r => ({
         roleName: r.roleName.trim(),
-        membersCount: Number(r.membersCount) || 1
+        membersCount: Math.max(1, Math.min(Number(r.membersCount) || 1, remainingOpenSeats))
       })),
       rolesNeeded: roleNames,
       openVacancies: vacancies,
@@ -252,6 +267,40 @@ export default function PostProjectModal({ isOpen, onClose, onAddProject, curren
               <option value="Data Science">Data Science</option>
               <option value="Other">Other</option>
             </select>
+          </div>
+
+          {/* Point 10: Needed Skills & Expected Commitment */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-title-sm text-title-sm text-on-surface mb-1">
+                Needed Skills <span className="text-secondary">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={neededSkills}
+                onChange={(e) => setNeededSkills(e.target.value)}
+                placeholder="e.g. React, Node.js, Python, Figma"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface placeholder:text-on-surface-variant font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block font-title-sm text-title-sm text-on-surface mb-1">
+                Expected Commitment <span className="text-secondary">*</span>
+              </label>
+              <select
+                required
+                value={expectedCommitment}
+                onChange={(e) => setExpectedCommitment(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all cursor-pointer"
+              >
+                <option value="5-10 hrs/week">5-10 hrs / week</option>
+                <option value="10-15 hrs/week">10-15 hrs / week</option>
+                <option value="15-20 hrs/week">15-20 hrs / week</option>
+                <option value="Full-time Sprint">Full-time Sprint (Hackathon)</option>
+              </select>
+            </div>
           </div>
 
           {/* 5. Roles Needed */}

@@ -108,6 +108,30 @@ export const chatApi = {
   getTeamDetails: async (teamId) => {
     return await apiClient(`/chat/${teamId}/details`);
   },
+
+  /**
+   * Reports message delivery receipt (Point 4)
+   * @param {string[]} messageIds
+   */
+  markDelivered: async (messageIds) => {
+    return await apiClient('/chat/receipts/delivered', {
+      method: 'POST',
+      body: { messageIds: Array.isArray(messageIds) ? messageIds : [messageIds] },
+    });
+  },
+
+  /**
+   * Reports conversation/messages read receipt (Point 4)
+   * @param {string} conversationId
+   * @param {string[]} [messageIds]
+   */
+  markRead: async (conversationId, messageIds) => {
+    return await apiClient('/chat/receipts/read', {
+      method: 'POST',
+      body: { conversationId, messageIds },
+    });
+  },
 };
 
 export default chatApi;
+

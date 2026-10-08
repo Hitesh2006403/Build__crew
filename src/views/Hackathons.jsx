@@ -88,6 +88,7 @@ export default function Hackathons({
   // Date classification and picker filters
   const [dateFilterMode, setDateFilterMode] = useState('all'); // 'all' | 'this-month' | 'upcoming'
   const [selectedDate, setSelectedDate] = useState(''); // 'YYYY-MM-DD'
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Current date formatted for min attribute to disable past dates
   const todayFormatted = useMemo(() => {
@@ -191,21 +192,56 @@ export default function Hackathons({
     dateFilterMode !== 'all' ||
     selectedDate;
 
-  // Overall Counts for Status Tabs matching all lifecycle states
+  // Point 12: Deduplicate listings and filter out placeholder events
+  const deduplicatedHackathons = useMemo(() => {
+    if (!Array.isArray(hackathons)) return [];
+    const seen = new Set();
+    const result = [];
+    for (const h of hackathons) {
+      if (!h) continue;
+      const rawTitle = String(h.title || '').trim();
+      const lower = rawTitle.toLowerCase();
+      // Filter out placeholders
+      if (
+        !rawTitle ||
+        lower === 'placeholder' ||
+        lower.includes('sample hackathon') ||
+        lower.includes('test hackathon') ||
+        lower.includes('sample event') ||
+        lower.includes('lorem ipsum')
+      ) {
+        continue;
+      }
+      // Deduplicate by normalized key
+      const key = (h.slug || h.simpleId || h.officialRegistrationLink || h.registrationLink || rawTitle)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(h);
+    }
+    return result;
+  }, [hackathons]);
+
+  const isHackathonUpcoming = (h) => {
+    return h.status === 'upcoming' || classifyHackathonDate(h) === 'upcoming';
+  };
+
+  // Overall Counts for Status Tabs matching all lifecycle states (Point 12: fix Upcoming 0)
   const tabCounts = useMemo(() => {
     return {
-      all: hackathons.length,
-      open: hackathons.filter(h => h.status === 'open').length,
-      'closing-soon': hackathons.filter(h => h.status === 'closing-soon').length,
-      upcoming: hackathons.filter(h => h.status === 'upcoming').length,
-      closed: hackathons.filter(h => h.status === 'closed' || h.status === 'finished').length,
-      'team-full': hackathons.filter(h => h.status === 'team-full').length
+      all: deduplicatedHackathons.length,
+      open: deduplicatedHackathons.filter(h => h.status === 'open' || !h.status).length,
+      'closing-soon': deduplicatedHackathons.filter(h => h.status === 'closing-soon').length,
+      upcoming: deduplicatedHackathons.filter(isHackathonUpcoming).length,
+      closed: deduplicatedHackathons.filter(h => h.status === 'closed' || h.status === 'finished').length,
+      'team-full': deduplicatedHackathons.filter(h => h.status === 'team-full').length
     };
-  }, [hackathons]);
+  }, [deduplicatedHackathons]);
 
   // Filtered Hackathons
   const filteredHackathons = useMemo(() => {
-    return hackathons.filter(h => {
+    return deduplicatedHackathons.filter(h => {
 
       // Search query (including title, subtitle, location, state, district, circuitId, simpleId)
       if (searchQuery.trim()) {
@@ -268,11 +304,11 @@ export default function Hackathons({
         if (!hasDateMatch && isoDates.length > 0) return false;
       }
 
-      // Status Tab filter for all 5 lifecycle states
+      // Status Tab filter for lifecycle states (Point 12: upcoming date classification)
       if (statusTab !== 'all') {
-        if (statusTab === 'open' && h.status !== 'open') return false;
+        if (statusTab === 'upcoming' && !isHackathonUpcoming(h)) return false;
+        if (statusTab === 'open' && (h.status !== 'open' && h.status)) return false;
         if (statusTab === 'closing-soon' && h.status !== 'closing-soon') return false;
-        if (statusTab === 'upcoming' && h.status !== 'upcoming') return false;
         if (statusTab === 'closed' && (h.status !== 'closed' && h.status !== 'finished')) return false;
         if (statusTab === 'team-full' && h.status !== 'team-full') return false;
       }
@@ -307,7 +343,7 @@ export default function Hackathons({
       return 0;
     });
   }, [
-    hackathons,
+    deduplicatedHackathons,
     searchQuery,
     statusTab,
     activeMode,
@@ -446,11 +482,29 @@ export default function Hackathons({
                 <span className="material-symbols-outlined text-base">view_list</span>
               </button>
             </div>
+
+            {/* Point 12: Collapsible Advanced Filters Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowAdvancedFilters(prev => !prev)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border shrink-0 ${
+                showAdvancedFilters || selectedState || selectedDistrict || selectedDate || activeTracks.length > 0
+                  ? 'bg-secondary/15 text-secondary border-secondary/40 shadow-xs'
+                  : 'bg-surface-container-low text-on-surface-variant hover:text-on-surface border-surface-container-high/80'
+              }`}
+            >
+              <span className="material-symbols-outlined text-sm">tune</span>
+              <span>Advanced Filters</span>
+              <span className="material-symbols-outlined text-xs">
+                {showAdvancedFilters ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
           </div>
         </div>
 
-        {/* Row 2: Unified Filter Controls Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-surface-container-high/60">
+        {/* Row 2: Advanced Filter Controls Bar (Point 12: Collapsed until needed) */}
+        {showAdvancedFilters && (
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-surface-container-high/60 animate-fadeIn">
           <div className="flex flex-wrap items-center gap-2">
             {/* Date classification pills */}
             <div className="inline-flex items-center gap-1 p-0.5 bg-surface-container-low rounded-xl">
@@ -704,6 +758,7 @@ export default function Hackathons({
             )}
           </div>
         </div>
+        )}
 
         {/* Row 3: Active Filter Chips Strip */}
         {(selectedState || selectedDistrict || selectedDate || dateFilterMode !== 'all' || activeTracks.length > 0) && (

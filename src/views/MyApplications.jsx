@@ -4,7 +4,8 @@ export default function MyApplications({
   applications = [], 
   currentUser,
   onSelectProjectById,
-  initialTab = 'received',
+  initialTab,
+  hasPostedProjects,
   onTabChange,
   onUpdateStatus
 }) {
@@ -16,13 +17,6 @@ export default function MyApplications({
     setPrevInitialTab(initialTab);
     setUserTab(null);
   }
-
-  const activeTab = userTab || initialTab || 'received';
-
-  const handleTabClick = (tab) => {
-    setUserTab(tab);
-    if (onTabChange) onTabChange(tab);
-  };
 
   const currentUserId = String(currentUser?._id || currentUser?.id || '');
 
@@ -37,6 +31,20 @@ export default function MyApplications({
     const applicantId = String(app.applicant?._id || app.applicant || '');
     return applicantId !== currentUserId;
   });
+
+  // Point 13: If student has no posted projects or 0 received applications, default to 'sent'
+  const computedDefaultTab = initialTab || (
+    hasPostedProjects === false || (receivedApplications.length === 0 && sentApplications.length > 0)
+      ? 'sent'
+      : 'received'
+  );
+
+  const activeTab = userTab || computedDefaultTab;
+
+  const handleTabClick = (tab) => {
+    setUserTab(tab);
+    if (onTabChange) onTabChange(tab);
+  };
 
   const pendingReceivedCount = receivedApplications.filter(a => a.status === 'pending').length;
 
@@ -252,10 +260,20 @@ export default function MyApplications({
           )
         ) : (
           sentApplications.length === 0 ? (
-            <div className="py-12 text-center text-on-surface-variant">
+            <div className="py-12 text-center text-on-surface-variant space-y-3">
               <span className="material-symbols-outlined text-4xl text-outline mb-2">assignment_late</span>
               <p className="font-body-lg text-body-lg text-on-surface font-semibold">You haven't submitted any applications yet</p>
-              <p className="font-body-sm text-body-sm mt-1">Browse projects on the Discover page to apply for open roles.</p>
+              <p className="font-body-sm text-body-sm mt-1 max-w-sm mx-auto">Browse projects on the Discover page to apply for open roles and collaborate with teams.</p>
+              {onSelectProjectById ? (
+                <button
+                  type="button"
+                  onClick={() => onSelectProjectById('')}
+                  className="mt-2 py-2 px-4 rounded-xl bg-primary text-on-primary font-title-sm text-xs font-bold hover:bg-surface-tint transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-base">explore</span>
+                  <span>Explore Projects to Apply</span>
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="space-y-space-md">

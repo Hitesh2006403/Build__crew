@@ -14,20 +14,25 @@ export default function TeamChatModal({ team, currentUser, isOpen, onClose }) {
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const teamRef = useRef(team);
+  teamRef.current = team;
 
   const teamId = team?._id || team?.id;
   const currentUserId = String(currentUser?._id || currentUser?.id || '');
+  const [socketConnected, setSocketConnected] = useState(true);
 
   const scrollToBottom = useCallback((smooth = true) => {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
   }, []);
 
   // Fetch chat history from MongoDB and setup Socket.IO room subscription
+  // Depends only on isOpen/teamId so object identity changes don't refetch history.
   useEffect(() => {
     if (!isOpen || !teamId) return;
 
     let isMounted = true;
     const socket = getSocket();
+    const fallbackTeam = teamRef.current;
 
     const fetchHistory = async () => {
       setIsLoading(true);
@@ -39,8 +44,8 @@ export default function TeamChatModal({ team, currentUser, isOpen, onClose }) {
         setMessages(data.messages || []);
         if (data.teamName || data.members) {
           setTeamDetails({
-            teamName: data.teamName || team.teamName || team.title,
-            members: data.members || team.members || [],
+            teamName: data.teamName || fallbackTeam?.teamName || fallbackTeam?.title,
+            members: data.members || fallbackTeam?.members || [],
           });
         }
       } catch (err) {
@@ -66,25 +71,99 @@ export default function TeamChatModal({ team, currentUser, isOpen, onClose }) {
         }
       }
     });
+    socket.emit('join-chat', teamId);
+
+    const handleConnect = () => {
+      if (!isMounted) return;
+      setSocketConnected(true);
+      socket.emit('join_team', { teamId }, (response) => {
+        if (response?.error && isMounted) {
+          setLoadError(response.error);
+        }
+      });
+      socket.emit('join-chat', teamId);
+    };
+    const handleDisconnect = () => { if (isMounted) setSocketConnected(false); };
+    setSocketConnected(Boolean(socket.connected));
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
 
     // 3. Listen for real-time incoming messages broadcasted via Socket.IO
-    const handleNewMessage = (newMessage) => {
-      if (!isMounted) return;
-      if (String(newMessage.teamId) === String(teamId)) {
+    const handleNewMessage = (payload) => {
+      const incomingMessage = payload?.message || payload;
+      if (!isMounted || !incomingMessage?._id) return;
+      const targetTeamId = payload?.teamId || payload?.chatId || incomingMessage?.teamId || incomingMessage?.chatId;
+      if (!targetTeamId || String(targetTeamId) === String(teamId)) {
         setMessages((prev) => {
-          // Prevent duplicate messages if already present
-          if (prev.some((m) => String(m._id) === String(newMessage._id))) {
-            return prev;
+          if (prev.some((m) => String(m._id) === String(incomingMessage._id))) {
+            return prev.map((m) => (String(m._id) === String(incomingMessage._id) ? incomingMessage : m));
           }
-          return [...prev, newMessage];
+          const incomingSender = String(
+            typeof incomingMessage.senderId === 'object' && incomingMessage.senderId !== null
+              ? incomingMessage.senderId._id || incomingMessage.senderId.id || incomingMessage.senderId
+              : incomingMessage.senderId || ''
+          );
+          const pendingIdx = prev.findIndex(
+            (m) =>
+              String(m._id || '').startsWith('temp-') &&
+              m.text === incomingMessage.text &&
+              String(
+                typeof m.senderId === 'object' && m.senderId !== null
+                  ? m.senderId._id || m.senderId.id || m.senderId
+                  : m.senderId || ''
+              ) === incomingSender
+          );
+          if (pendingIdx !== -1) {
+            const next = [...prev];
+            next[pendingIdx] = incomingMessage;
+            return next;
+          }
+          return [...prev, incomingMessage];
         });
+
+        // Report delivery & read receipt if this incoming message is from another teammate
+        const incomingSenderId = String(
+          typeof incomingMessage.senderId === 'object' && incomingMessage.senderId !== null
+            ? incomingMessage.senderId._id || incomingMessage.senderId.id || incomingMessage.senderId
+            : incomingMessage.senderId || ''
+        );
+        if (incomingSenderId !== currentUserId) {
+          socket.emit('message_delivered', { messageId: incomingMessage._id });
+          socket.emit('conversation_read', { conversationId: teamId, messageIds: [incomingMessage._id] });
+          chatApi.markRead(teamId, [incomingMessage._id]).catch(() => {});
+        }
+
         setTimeout(() => {
           if (isMounted) scrollToBottom(true);
         }, 50);
       }
     };
 
+    // 4. Listen for live receipt updates (Point 4: update sender live)
+    const handleReceiptUpdated = (receipt) => {
+      if (!receipt?.messageId || !isMounted) return;
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (String(m._id) === String(receipt.messageId)) {
+            return {
+              ...m,
+              recipients: receipt.recipients || m.recipients,
+            };
+          }
+          return m;
+        })
+      );
+    };
+
     socket.on('new_message', handleNewMessage);
+    socket.on('receive-message', handleNewMessage);
+    socket.on('receive_message', handleNewMessage);
+    socket.on('new_group_message', handleNewMessage);
+    socket.on('receipt_updated', handleReceiptUpdated);
+
+    // Mark conversation read on initial open
+    socket.emit('conversation_read', { conversationId: teamId });
+    chatApi.markRead(teamId).catch(() => {});
 
     // Focus input field when chat opens
     setTimeout(() => {
@@ -94,70 +173,215 @@ export default function TeamChatModal({ team, currentUser, isOpen, onClose }) {
     return () => {
       isMounted = false;
       socket.emit('leave_team', { teamId });
+      socket.emit('leave-chat', teamId);
       socket.off('new_message', handleNewMessage);
+      socket.off('receive-message', handleNewMessage);
+      socket.off('receive_message', handleNewMessage);
+      socket.off('new_group_message', handleNewMessage);
+      socket.off('receipt_updated', handleReceiptUpdated);
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
     };
-  }, [isOpen, teamId, team, scrollToBottom]);
+  }, [isOpen, teamId, currentUserId, scrollToBottom]);
 
-  // Scroll to bottom when message list changes
+  // Fast polling fallback (always on): Socket.IO needs a persistent Node
+  // process, but serverless hosting cannot hold WebSockets. Polling merges
+  // new messages by _id so both sides see messages without refresh.
   useEffect(() => {
-    if (messages.length > 0) {
-      scrollToBottom(true);
-    }
-  }, [messages.length, scrollToBottom]);
+    if (!isOpen || !teamId) return;
+    let cancelled = false;
+    let inFlight = false;
+    const poll = async () => {
+      if (inFlight) return;
+      if (typeof document !== 'undefined' && document.hidden) return;
+      inFlight = true;
+      try {
+        const data = await chatApi.getTeamMessages(teamId);
+        if (cancelled || !data?.messages) return;
+        setMessages((prev) => {
+          const known = new Set(prev.map((m) => String(m._id)));
+          const fresh = data.messages.filter((m) => m?._id && !known.has(String(m._id)));
+          if (!fresh.length) return prev;
+          let next = prev;
+          for (const real of fresh) {
+            const realSender = String(
+              typeof real.senderId === 'object' && real.senderId !== null
+                ? real.senderId._id || real.senderId.id || real.senderId
+                : real.senderId || ''
+            );
+            const pendingIdx = next.findIndex(
+              (m) =>
+                String(m._id || '').startsWith('temp-') &&
+                m.text === real.text &&
+                String(
+                  typeof m.senderId === 'object' && m.senderId !== null
+                    ? m.senderId._id || m.senderId.id || m.senderId
+                    : m.senderId || ''
+                ) === realSender
+            );
+            if (pendingIdx !== -1) {
+              next = [...next.slice(0, pendingIdx), ...next.slice(pendingIdx + 1)];
+            }
+          }
+          return [...next, ...fresh];
+        });
+      } catch {
+        // Silent: next tick retries.
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(poll, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [isOpen, teamId]);
 
-  // Send message handler
+  // Point 4: Exact text-only receipt ticks renderer
+  const renderReceiptTicks = (msg) => {
+    // 1. Clock while sending (pending/optimistic)
+    if (msg.pending || String(msg._id || '').startsWith('temp-')) {
+      return (
+        <span className="material-symbols-outlined text-[13px] text-outline select-none leading-none" title="Sending...">
+          schedule
+        </span>
+      );
+    }
+
+    const recipients = Array.isArray(msg.recipients) ? msg.recipients : [];
+
+    // If no recipients snapshot: show single grey tick
+    if (recipients.length === 0) {
+      return (
+        <span className="material-symbols-outlined text-[13px] text-outline/80 select-none leading-none" title="Saved by server">
+          check
+        </span>
+      );
+    }
+
+    const allRead = recipients.length > 0 && recipients.every((r) => r.read);
+    const allDelivered = recipients.length > 0 && recipients.every((r) => r.delivered || r.read);
+
+    // 4. Two blue ticks when every intended recipient opens conversation and sees it
+    if (allRead) {
+      return (
+        <span className="material-symbols-outlined text-[14px] text-sky-400 font-bold select-none leading-none" title="Read by all teammates">
+          done_all
+        </span>
+      );
+    }
+
+    // 3. Two grey ticks when every intended recipient receives it
+    if (allDelivered) {
+      return (
+        <span className="material-symbols-outlined text-[14px] text-outline/80 select-none leading-none" title="Delivered to all teammates">
+          done_all
+        </span>
+      );
+    }
+
+    // 2. One grey tick after server saves it
+    return (
+      <span className="material-symbols-outlined text-[13px] text-outline/80 select-none leading-none" title="Saved by server">
+        check
+      </span>
+    );
+  };
+
+  // Send message handler (optimistic: bubble appears instantly)
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
     const trimmed = inputText.trim();
 
-    if (!trimmed || isSending) return;
+    if (!trimmed) return;
 
     if (trimmed.length > 1000) {
       setSendError('Message cannot exceed 1000 characters.');
       return;
     }
 
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const optimisticMessage = {
+      _id: tempId,
+      teamId,
+      text: trimmed,
+      senderId: {
+        _id: currentUserId,
+        name: currentUser?.name || 'You',
+        avatar: currentUser?.avatar || currentUser?.profileImage || '',
+        profileImage: currentUser?.profileImage || currentUser?.avatar || '',
+      },
+      createdAt: new Date().toISOString(),
+      pending: true,
+    };
+
+    setMessages((prev) => [...prev, optimisticMessage]);
+    setInputText('');
     setIsSending(true);
     setSendError(null);
+
+    const replaceTempWithReal = (realMessage) => {
+      if (!realMessage?._id) return;
+      setMessages((prev) => {
+        if (prev.some((m) => String(m._id) === String(realMessage._id))) {
+          return prev.filter((m) => String(m._id) !== String(tempId));
+        }
+        return prev.map((m) => (String(m._id) === String(tempId) ? realMessage : m));
+      });
+    };
+
+    const removeTempAndRestore = () => {
+      setMessages((prev) => prev.filter((m) => String(m._id) !== String(tempId)));
+      setInputText(trimmed);
+    };
 
     const socket = getSocket();
 
     // Primary real-time flow: send via Socket.IO with acknowledgment
     if (socket && socket.connected) {
-      socket.timeout(6000).emit('send_message', { teamId, text: trimmed }, (err, response) => {
+      socket.timeout(3000).emit('send_message', { teamId, text: trimmed }, (err, response) => {
         if (err || response?.error || !response?.success) {
           console.warn('[Socket.IO] Send failed, trying REST fallback:', err || response?.error);
           // Fallback to REST API if socket acknowledgment timed out
-          fallbackRestSend(trimmed);
+          fallbackRestSend(trimmed, replaceTempWithReal, removeTempAndRestore);
         } else {
-          setInputText('');
-          setIsSending(false);
+          replaceTempWithReal(response.message || response?.message);
           setSendError(null);
+          setIsSending(false);
         }
       });
     } else {
       // If socket is disconnected, use REST API directly
-      fallbackRestSend(trimmed);
+      fallbackRestSend(trimmed, replaceTempWithReal, removeTempAndRestore);
     }
   };
 
-  const fallbackRestSend = async (textToSend) => {
+  const fallbackRestSend = async (textToSend, replaceTemp, removeTemp) => {
     try {
       const res = await chatApi.sendMessage(teamId, textToSend);
       if (res?.message) {
-        setMessages((prev) => {
-          if (prev.some((m) => String(m._id) === String(res.message._id))) {
-            return prev;
-          }
-          return [...prev, res.message];
-        });
+        if (replaceTemp) {
+          replaceTemp(res.message);
+        } else {
+          setMessages((prev) => {
+            if (prev.some((m) => String(m._id) === String(res.message._id))) {
+              return prev;
+            }
+            return [...prev, res.message];
+          });
+        }
         setInputText('');
         setSendError(null);
       } else {
+        if (removeTemp) removeTemp();
+        else setInputText(textToSend);
         setSendError('Message could not be sent. Please try again.');
       }
     } catch (err) {
       console.error('REST chat send error:', err);
+      if (removeTemp) removeTemp();
+      else setInputText(textToSend);
       setSendError('Message could not be sent. Please try again.');
     } finally {
       setIsSending(false);
@@ -203,9 +427,9 @@ export default function TeamChatModal({ team, currentUser, isOpen, onClose }) {
                 <h2 className="font-headline-sm text-base font-bold text-on-surface truncate">
                   {displayTitle}
                 </h2>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live Chat
+                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold shrink-0 ${socketConnected ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${socketConnected ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                  {socketConnected ? 'Live Chat' : 'Reconnecting...'}
                 </span>
               </div>
               <p className="font-body-sm text-xs text-on-surface-variant truncate">
@@ -335,7 +559,13 @@ export default function TeamChatModal({ team, currentUser, isOpen, onClose }) {
               </p>
             </div>
           ) : (
-            messages.map((msg, index) => {
+            <>
+              {/* Point 15: Plainly explain chat retention policy */}
+              <div className="mx-auto max-w-sm my-1 px-3 py-1.5 rounded-xl bg-surface-container/70 border border-surface-container-high/60 text-center text-[11px] text-outline font-medium flex items-center justify-center gap-1.5 select-none shrink-0">
+                <span className="material-symbols-outlined text-xs text-secondary">history_toggle_off</span>
+                <span>Messages are retained for 30 days or up to 500 messages. Text only.</span>
+              </div>
+              {messages.map((msg, index) => {
               const senderObj = typeof msg.senderId === 'object' && msg.senderId !== null ? msg.senderId : {};
               const senderId = String(senderObj._id || senderObj.id || msg.senderId || '');
               const isMe = senderId === currentUserId;
@@ -389,18 +619,24 @@ export default function TeamChatModal({ team, currentUser, isOpen, onClose }) {
                     {msg.text}
                   </div>
 
-                  {/* Timestamp */}
-                  <div className="flex items-center gap-1 mt-0.5 px-1">
+                  {/* Timestamp & Point 4 Receipt Ticks */}
+                  <div className={`flex items-center gap-1 mt-0.5 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                     <span className="text-[10px] text-outline font-medium">
                       {isMe ? 'You • ' : ''}
                       {formatTime(msg.createdAt)}
                     </span>
+                    {isMe && (
+                      <span className="inline-flex items-center ml-0.5">
+                        {renderReceiptTicks(msg)}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
-            })
-          )}
-          <div ref={messagesEndRef} />
+            })}
+          </>
+        )}
+        <div ref={messagesEndRef} />
         </div>
 
         {/* Clear Send Error Alert */}
@@ -436,7 +672,7 @@ export default function TeamChatModal({ team, currentUser, isOpen, onClose }) {
                   if (sendError) setSendError(null);
                 }}
                 onKeyDown={handleKeyDown}
-                disabled={isSending || isLoading || Boolean(loadError)}
+                disabled={isLoading || Boolean(loadError)}
                 maxLength={1000}
                 placeholder={
                   loadError
@@ -454,7 +690,7 @@ export default function TeamChatModal({ team, currentUser, isOpen, onClose }) {
 
             <button
               type="submit"
-              disabled={!inputText.trim() || isSending || isLoading || Boolean(loadError)}
+              disabled={!inputText.trim() || isLoading || Boolean(loadError)}
               className="py-2.5 px-4 rounded-xl bg-primary text-on-primary hover:bg-surface-tint font-title-sm text-xs font-bold transition-all cursor-pointer shadow-xs disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0 active:scale-[0.98]"
             >
               {isSending ? (

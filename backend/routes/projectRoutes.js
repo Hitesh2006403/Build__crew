@@ -46,7 +46,8 @@ router.get("/", async (req, res) => {
     const projects = await Project.find(query)
       .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
       .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.json(projects);
   } catch (err) {
@@ -64,14 +65,17 @@ router.get("/:id", async (req, res) => {
     if (mongoose.Types.ObjectId.isValid(id)) {
       project = await Project.findById(id)
         .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
-        .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam");
+        .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+        .lean();
     }
 
-    if (!project) {
-      // Fallback search by custom slug or title if applicable
-      project = await Project.findOne({ $or: [{ _id: mongoose.Types.ObjectId.isValid(id) ? id : null }, { fullTitle: id }] })
+    if (!project && !mongoose.Types.ObjectId.isValid(id)) {
+      // Fallback search by custom slug/title only when id is not an ObjectId.
+      // Avoids a second heavy populate query for normal ObjectId lookups.
+      project = await Project.findOne({ fullTitle: id })
         .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
-        .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam");
+        .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+        .lean();
     }
 
     if (!project) {
@@ -176,7 +180,8 @@ router.post("/", authenticateUser, async (req, res) => {
 
     const populated = await Project.findById(newProject._id)
       .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
-      .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam");
+      .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+      .lean();
 
     return res.status(201).json({
       success: true,
@@ -358,7 +363,8 @@ router.patch("/:id/clear-team-full", authenticateUser, async (req, res) => {
 
     const populated = await Project.findById(id)
       .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
-      .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam");
+      .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+      .lean();
 
     return res.json({
       success: true,

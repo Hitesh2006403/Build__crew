@@ -50,7 +50,10 @@ export default function Header({
 
   const handleInputChange = (e) => {
     setSearchQuery(e.target.value);
-    if (onSearchFocus) {
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && onSearchFocus) {
       onSearchFocus();
     }
   };
@@ -94,8 +97,9 @@ export default function Header({
             type="text"
             value={searchQuery || ''}
             onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
             className="w-full pl-8 sm:pl-9 pr-7 sm:pr-9 py-1.5 sm:py-2 bg-surface-container-lowest text-on-surface placeholder:text-on-surface-variant font-body-sm text-xs sm:text-sm rounded-xl outline-none shadow-[0_1px_3px_rgba(15,23,42,0.04)] focus:shadow-[0_0_0_2px_rgba(0,81,213,0.3)] border border-transparent focus:border-secondary/20 transition-all truncate" 
-            placeholder="Search projects, roles..." 
+            placeholder="Search projects..." 
           />
           {searchQuery ? (
             <button

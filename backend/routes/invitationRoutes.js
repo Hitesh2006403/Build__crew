@@ -8,6 +8,7 @@ import User from "../models/User.js";
 import Notification from "../models/Notification.js";
 import { authenticateUser } from "../middleware/auth.js";
 import { sendTeamInvitationEmail } from "../utils/emailService.js";
+import { getOrCreateCanonicalGroup } from "../utils/teamAuth.js";
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ router.get("/my", authenticateUser, async (req, res) => {
     const received = await Invitation.find({ receiver: req.user._id })
       .populate("sender", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge type members totalCapacity filledCount")
-      .populate("team", "teamName")
+      .populate("team", "teamName project")
       .populate("hackathonTeam", "teamName title hackathonTitle members totalCapacity filledCount")
       .sort({ createdAt: -1 })
       .lean();
@@ -25,10 +26,45 @@ router.get("/my", authenticateUser, async (req, res) => {
     const sent = await Invitation.find({ sender: req.user._id })
       .populate("receiver", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
       .populate("project", "title categoryBadge type members totalCapacity filledCount")
-      .populate("team", "teamName")
+      .populate("team", "teamName project")
       .populate("hackathonTeam", "teamName title hackathonTitle members totalCapacity filledCount")
       .sort({ createdAt: -1 })
       .lean();
+
+    // Self-healing reconciliation (Point 1):
+    // For any accepted invitations, ensure the receiver is in project/hackathonTeam.members & canonical chat
+    for (const inv of received || []) {
+      if (inv.status === "accepted") {
+        const pId = inv.project?._id || inv.project || inv.team?.project?._id || inv.team?.project;
+        if (pId) {
+          Project.findById(pId).then(async (proj) => {
+            if (proj) {
+              const currentIds = (proj.members || []).map((m) => m.toString());
+              if (!currentIds.includes(req.user._id.toString())) {
+                proj.members.push(req.user._id);
+                proj.filledCount = proj.members.length;
+                await proj.save();
+              }
+              await getOrCreateCanonicalGroup(proj._id);
+            }
+          }).catch(() => {});
+        }
+        const hId = inv.hackathonTeam?._id || inv.hackathonTeam;
+        if (hId) {
+          HackathonTeam.findById(hId).then(async (hTeam) => {
+            if (hTeam) {
+              const currentIds = (hTeam.members || []).map((m) => m.toString());
+              if (!currentIds.includes(req.user._id.toString())) {
+                hTeam.members.push(req.user._id);
+                hTeam.filledCount = hTeam.members.length;
+                await hTeam.save();
+              }
+              await getOrCreateCanonicalGroup(hTeam._id);
+            }
+          }).catch(() => {});
+        }
+      }
+    }
 
     return res.json({ received, sent });
   } catch (err) {
@@ -344,6 +380,27 @@ router.patch("/:id", authenticateUser, async (req, res) => {
             team.members.push(req.user._id);
             await team.save();
           }
+          if (team.project) {
+            const p = await Project.findById(team.project._id || team.project);
+            if (p) {
+              const pMembers = (p.members || []).map((m) => m.toString());
+              if (!pMembers.includes(req.user._id.toString())) {
+                p.members.push(req.user._id);
+                p.filledCount = p.members.length;
+                await p.save();
+              }
+            }
+          }
+        }
+      }
+
+      // Automatically make eligible team member able to access canonical chat (Points 1 & 3)
+      const targetCanonicalId = invitation.project?._id || invitation.project || invitation.hackathonTeam?._id || invitation.hackathonTeam || invitation.team?.project || invitation.team?._id || invitation.team;
+      if (targetCanonicalId) {
+        try {
+          await getOrCreateCanonicalGroup(targetCanonicalId);
+        } catch (chatSyncErr) {
+          console.warn("[Invitation] Canonical chat sync warning:", chatSyncErr.message);
         }
       }
 

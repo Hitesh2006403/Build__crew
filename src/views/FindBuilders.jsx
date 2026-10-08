@@ -1,4 +1,19 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+export function formatTeammateName(builder) {
+  if (!builder) return 'Campus Teammate';
+  const name = String(builder.name || '').trim();
+  if (!name || name.includes('@')) {
+    const emailToUse = name.includes('@') ? name : String(builder.email || '');
+    if (emailToUse) {
+      const handle = emailToUse.split('@')[0].replace(/[._-]/g, ' ');
+      return handle.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+    return 'Campus Teammate';
+  }
+  return name;
+}
 
 export default function FindBuilders({ 
   builders = [], 
@@ -10,6 +25,7 @@ export default function FindBuilders({
   showToast, 
   currentUser 
 }) {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
   const [selectedBuilderForInvite, setSelectedBuilderForInvite] = useState(null);
@@ -83,13 +99,14 @@ function cleanText(text) {
       return;
     }
     if (myAvailableSquads.length === 0) {
-      if (showToast) showToast('You must create a project or squad first before you can invite teammates.');
+      // Point 2: Instead of dead-end toast, open modal prompting to create a project to invite this student
+      setSelectedBuilderForInvite(builder);
       return;
     }
     setSelectedBuilderForInvite(builder);
     setSelectedSquadTarget(myAvailableSquads[0].id);
     setInviteRole('Core Contributor');
-    setInviteMessage(`Hey ${builder.name?.split(' ')[0] || 'there'}, join our squad on BuildCrew!`);
+    setInviteMessage(`Hey ${formatTeammateName(builder)?.split(' ')[0] || 'there'}, join our team on BuildCrew!`);
   };
 
   const handleSendInviteSubmit = async (e) => {
@@ -161,10 +178,30 @@ function cleanText(text) {
             Find Campus Teammates
           </h1>
           <p className="font-body-lg text-body-lg text-on-surface-variant mt-1">
-            Browse registered students and invite them to collaborate on your projects or hackathon teams.
+            Browse registered students and invite them to collaborate on your project teams.
           </p>
         </div>
       </div>
+
+      {/* Point 11: Prompt current user to complete skills and availability */}
+      {currentUser && (!currentUser.skills?.length || !currentUser.availability) && (
+        <div className="bg-secondary/10 border border-secondary/20 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-secondary animate-fadeIn">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-2xl shrink-0 text-secondary">edit_note</span>
+            <div className="text-xs">
+              <p className="font-bold text-on-surface">Boost your visibility to teams</p>
+              <p className="text-on-surface-variant">Add your skills and weekly availability to your profile so project leads can discover and invite you.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/profile')}
+            className="px-4 py-2 rounded-xl bg-secondary text-on-secondary font-bold text-xs shrink-0 hover:bg-secondary/90 transition-all cursor-pointer shadow-xs"
+          >
+            Update Profile
+          </button>
+        </div>
+      )}
 
       {/* Search & Filter bar */}
       <div className="bg-surface-container-lowest p-space-md rounded-2xl shadow-sm flex flex-col md:flex-row gap-space-md items-center justify-between">
@@ -264,9 +301,10 @@ function cleanText(text) {
             const avatarImg = (isSelf ? (currentUser.avatar || currentUser.profileImage) : null) || b.avatar || b.profileImage || '';
             const collegeName = cleanText(b.college || b.university);
             const branchName = b.branch || b.major || '';
-            const semesterText = b.semester ? `Semester ${b.semester}` : (b.year ? `Class of ${b.year}` : '');
+            const isSemesterSet = Boolean(b.semester && b.semester > 1) || Boolean(b.semesterSpecified);
+            const semesterText = isSemesterSet ? `Semester ${b.semester}` : (b.year ? `Class of ${b.year}` : '');
             const hasSkills = Array.isArray(b.skills) && b.skills.length > 0;
-            const hasBio = Boolean(b.bio && b.bio.trim());
+            const displayName = formatTeammateName(b);
 
             return (
               <div
@@ -294,13 +332,13 @@ function cleanText(text) {
                         style={{ display: avatarImg ? 'none' : 'flex' }}
                         className="w-14 h-14 rounded-2xl bg-secondary/15 text-secondary font-bold text-xl items-center justify-center shadow-sm shrink-0"
                       >
-                        {(b.name || 'S').charAt(0).toUpperCase()}
+                        {(displayName || 'T').charAt(0).toUpperCase()}
                       </div>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-title-md text-title-md font-bold text-on-surface truncate">
-                          {b.name}
+                        <h3 className="font-title-md text-title-md font-bold text-on-surface truncate" title={displayName}>
+                          {displayName}
                         </h3>
                         {isSelf ? (
                           <span className="px-2 py-0.5 rounded-full bg-secondary text-on-secondary font-label-sm text-[11px] font-bold">
@@ -321,6 +359,12 @@ function cleanText(text) {
                       {semesterText && (
                         <div className="text-[11px] text-outline font-medium mt-0.5">
                           {semesterText}
+                        </div>
+                      )}
+                      {b.availability && (
+                        <div className="text-[10px] text-secondary font-semibold mt-0.5 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-xs">schedule</span>
+                          <span>{b.availability}</span>
                         </div>
                       )}
                     </div>
@@ -425,19 +469,38 @@ function cleanText(text) {
             {/* Content */}
             <div className="p-6 space-y-4">
               {myAvailableSquads.length === 0 ? (
-                <div className="text-center py-6 space-y-3">
-                  <span className="material-symbols-outlined text-4xl text-outline">group_add</span>
-                  <h4 className="font-bold text-base text-on-surface">No Active Teams Found</h4>
-                  <p className="text-xs text-on-surface-variant max-w-sm mx-auto">
-                    You must first post a project or form a hackathon team to invite teammates.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedBuilderForInvite(null)}
-                    className="px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-bold text-on-surface cursor-pointer mt-2"
-                  >
-                    Close
-                  </button>
+                <div className="text-center py-6 space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-secondary/10 text-secondary flex items-center justify-center mx-auto">
+                    <span className="material-symbols-outlined text-3xl">rocket_launch</span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-base text-on-surface">
+                      Create a project to invite this student
+                    </h4>
+                    <p className="text-xs text-on-surface-variant max-w-sm mx-auto mt-1 leading-relaxed">
+                      You must create a project first before you can invite {formatTeammateName(selectedBuilderForInvite)} to join your team.
+                    </p>
+                  </div>
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBuilderForInvite(null)}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-semibold text-on-surface cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedBuilderForInvite(null);
+                        navigate('/create-project');
+                      }}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-primary hover:bg-surface-tint text-on-primary text-xs font-bold shadow-md cursor-pointer flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <span className="material-symbols-outlined text-sm">add_circle</span>
+                      <span>Create a project to invite this student</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleSendInviteSubmit} className="space-y-4 text-sm">

@@ -24,8 +24,8 @@ import invitationRoutes from "./routes/invitationRoutes.js";
 import notificationRoutes from "./routes/notificationRoutes.js";
 import hackathonRoutes from "./routes/hackathonRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
-import { verifyTeamMembership, verifyGroupMembership } from "./utils/teamAuth.js";
-import { saveAndTrimMessage } from "./models/Message.js";
+import { verifyTeamMembership, verifyGroupMembership, getOrCreateCanonicalGroup } from "./utils/teamAuth.js";
+import Message, { saveAndTrimMessage } from "./models/Message.js";
 import ChatGroup from "./models/ChatGroup.js";
 
 import Project from "./models/Project.js";
@@ -88,19 +88,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "buildcrew_super_secret_jwt_key_202
 
 const io = new Server(httpServer, {
   cors: {
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (
-        allowedOrigins.length === 0 ||
-        allowedOrigins.includes(origin) ||
-        origin.endsWith(".vercel.app") ||
-        origin.startsWith("http://localhost:") ||
-        origin.startsWith("https://localhost:")
-      ) {
-        return callback(null, true);
-      }
-      return callback(null, true);
-    },
+    origin: (origin, callback) => callback(null, true),
     credentials: true,
   },
 });
@@ -156,154 +144,104 @@ io.use(async (socket, next) => {
   }
 });
 
-// Socket.IO event listeners for Team Chat
+// Socket.IO event listeners for Real-Time Chat & Collaboration
 io.on("connection", (socket) => {
-  // Join Team Room (verifies team membership before allowing access)
-  socket.on("join_team", async (data, callback) => {
-    try {
-      const teamId = typeof data === "object" ? data?.teamId : data;
-      if (!teamId) {
-        if (typeof callback === "function") callback({ error: "teamId is required." });
-        return;
-      }
-
-      const authCheck = await verifyTeamMembership(socket.user._id, teamId, socket.user.role);
-      if (!authCheck.valid) {
-        if (typeof callback === "function") {
-          callback({ error: authCheck.error || "Access denied: You are not a member of this team." });
-        }
-        return;
-      }
-
-      socket.join(`team:${teamId}`);
-      if (typeof callback === "function") {
-        callback({ success: true, teamId, teamName: authCheck.teamName });
-      }
-    } catch (err) {
-      console.error("Socket join_team error:", err);
-      if (typeof callback === "function") {
-        callback({ error: "Could not join team room." });
-      }
-    }
-  });
-
-  // Leave Team Room
-  socket.on("leave_team", (data) => {
-    const teamId = typeof data === "object" ? data?.teamId : data;
-    if (teamId) {
-      socket.leave(`team:${teamId}`);
-    }
-  });
-
-  // Send Message (verifies membership, validates text, saves to MongoDB with 500-message limit, broadcasts)
-  socket.on("send_message", async (data, callback) => {
-    try {
-      const { teamId, text } = data || {};
-      if (!teamId) {
-        if (typeof callback === "function") callback({ error: "teamId is required." });
-        return;
-      }
-
-      // Backend security: verify sender's team membership
-      const authCheck = await verifyTeamMembership(socket.user._id, teamId, socket.user.role);
-      if (!authCheck.valid) {
-        if (typeof callback === "function") {
-          callback({ error: authCheck.error || "Access denied: You are not a member of this team." });
-        }
-        return;
-      }
-
-      // Text validation: plain text only, non-empty, max 1000 chars
-      if (!text || typeof text !== "string" || !text.trim()) {
-        if (typeof callback === "function") callback({ error: "Message text cannot be empty." });
-        return;
-      }
-
-      if (text.length > 1000) {
-        if (typeof callback === "function") callback({ error: "Maximum message length is 1000 characters." });
-        return;
-      }
-
-      // Save to MongoDB with Atlas Free storage protection (500 message retention)
-      const savedMessage = await saveAndTrimMessage({
-        teamId,
-        senderId: socket.user._id,
-        text,
-      });
-
-      // Broadcast to all team members in real-time
-      io.to(`team:${teamId}`).emit("new_message", savedMessage);
-
-      if (typeof callback === "function") {
-        callback({ success: true, message: savedMessage });
-      }
-    } catch (err) {
-      console.error("Socket send_message error:", err);
-      if (typeof callback === "function") {
-        callback({ error: "Message could not be sent. Please try again." });
-      }
-    }
-  });
+  console.log("User connected:", socket.id, "userId:", socket.user?._id);
 
   // Join user's personal notification room
   if (socket.user?._id) {
     socket.join(`user:${socket.user._id}`);
   }
 
-  // Join Group Room (verifies group membership)
-  socket.on("join_group", async (data, callback) => {
+  // Unified Room Joining (supports join-chat, join_chat, join_group, join_team)
+  const handleJoinChat = async (data, callback) => {
     try {
-      const groupId = typeof data === "object" ? data?.groupId : data;
-      if (!groupId) {
-        if (typeof callback === "function") callback({ error: "groupId is required." });
+      const chatId = typeof data === "object" ? (data?.chatId || data?.groupId || data?.teamId || data?.id) : data;
+      if (!chatId) {
+        if (typeof callback === "function") callback({ error: "chatId or groupId is required." });
         return;
       }
 
-      const authCheck = await verifyGroupMembership(socket.user._id, groupId, socket.user.role);
+      // 1. Check group membership
+      let isGroup = true;
+      let authCheck = await verifyGroupMembership(socket.user._id, chatId, socket.user.role);
+      let roomTitle = authCheck.group?.name;
+
+      // 2. If not a ChatGroup, check team membership
+      if (!authCheck.valid) {
+        const teamCheck = await verifyTeamMembership(socket.user._id, chatId, socket.user.role);
+        if (teamCheck.valid) {
+          authCheck = teamCheck;
+          isGroup = false;
+          roomTitle = teamCheck.teamName;
+        }
+      }
+
       if (!authCheck.valid) {
         if (typeof callback === "function") {
-          callback({ error: authCheck.error || "Access denied: You are not a member of this chat group." });
+          callback({ error: authCheck.error || "Access denied: You are not a member of this chat room." });
         }
         return;
       }
 
-      socket.join(`group:${groupId}`);
+      const idStr = String(chatId);
+      socket.join(idStr);
+      socket.join(`group:${idStr}`);
+      socket.join(`team:${idStr}`);
+
+      console.log(`[Socket] User ${socket.user?.name || socket.user?._id} joined chat room: ${idStr}`);
+
       if (typeof callback === "function") {
-        callback({ success: true, groupId, groupName: authCheck.group?.name });
+        callback({
+          success: true,
+          chatId: idStr,
+          groupId: idStr,
+          teamId: idStr,
+          title: roomTitle,
+          isGroup,
+        });
       }
     } catch (err) {
-      console.error("Socket join_group error:", err);
-      if (typeof callback === "function") callback({ error: "Could not join group room." });
+      console.error("Socket join error:", err);
+      if (typeof callback === "function") {
+        callback({ error: "Could not join chat room." });
+      }
     }
-  });
+  };
 
-  // Leave Group Room
-  socket.on("leave_group", (data) => {
-    const groupId = typeof data === "object" ? data?.groupId : data;
-    if (groupId) {
-      socket.leave(`group:${groupId}`);
+  socket.on("join-chat", handleJoinChat);
+  socket.on("join_chat", handleJoinChat);
+  socket.on("join_group", handleJoinChat);
+  socket.on("join_team", handleJoinChat);
+
+  // Unified Room Leaving
+  const handleLeaveChat = (data) => {
+    const chatId = typeof data === "object" ? (data?.chatId || data?.groupId || data?.teamId || data?.id) : data;
+    if (chatId) {
+      const idStr = String(chatId);
+      socket.leave(idStr);
+      socket.leave(`group:${idStr}`);
+      socket.leave(`team:${idStr}`);
     }
-  });
+  };
 
-  // Send Group Message (verifies membership, validates text, saves with 500-message limit, broadcasts)
-  socket.on("send_group_message", async (data, callback) => {
+  socket.on("leave-chat", handleLeaveChat);
+  socket.on("leave_chat", handleLeaveChat);
+  socket.on("leave_group", handleLeaveChat);
+  socket.on("leave_team", handleLeaveChat);
+
+  // Unified Message Sending & Real-time Broadcasting
+  const handleSendMessage = async (data, callback) => {
     try {
-      const { groupId, text } = data || {};
-      if (!groupId) {
-        if (typeof callback === "function") callback({ error: "groupId is required." });
+      const { chatId: rawChatId, groupId: rawGroupId, teamId: rawTeamId, text: rawText, message: rawMessage } = data || {};
+      const targetId = rawChatId || rawGroupId || rawTeamId;
+      const text = rawText || rawMessage;
+
+      if (!targetId) {
+        if (typeof callback === "function") callback({ error: "chatId or groupId is required." });
         return;
       }
 
-      // Security: verify group membership
-      const authCheck = await verifyGroupMembership(socket.user._id, groupId, socket.user.role);
-      if (!authCheck.valid) {
-        if (typeof callback === "function") {
-          callback({ error: authCheck.error || "Access denied: You are not a member of this chat group." });
-        }
-        return;
-      }
-
-      // Strictly plain text only: max 1000 chars, no files, no stickers, no gifs
       if (!text || typeof text !== "string" || !text.trim()) {
         if (typeof callback === "function") callback({ error: "Message text cannot be empty." });
         return;
@@ -314,38 +252,182 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // Persist to MongoDB with 500-message retention & 30-day TTL protection
+      // Check group membership first, then team membership
+      let isGroup = true;
+      let authCheck = await verifyGroupMembership(socket.user._id, targetId, socket.user.role);
+      if (!authCheck.valid) {
+        const teamCheck = await verifyTeamMembership(socket.user._id, targetId, socket.user.role);
+        if (teamCheck.valid) {
+          authCheck = teamCheck;
+          isGroup = false;
+        }
+      }
+
+      if (!authCheck.valid) {
+        if (typeof callback === "function") {
+          callback({ error: authCheck.error || "Access denied: You are not a member of this chat room." });
+        }
+        return;
+      }
+
+      // Resolve canonical conversation IDs and snapshot recipientIds (Points 3 & 4)
+      let canonicalGroupId = isGroup ? targetId : undefined;
+      let linkedTeamId = isGroup ? authCheck.group?.teamId : targetId;
+      let recipientList = [];
+
+      if (!isGroup) {
+        const canonical = await getOrCreateCanonicalGroup(targetId).catch(() => null);
+        if (canonical?._id) canonicalGroupId = canonical._id;
+        recipientList = (authCheck.members || []).map((m) => String(m._id || m));
+      } else {
+        recipientList = (authCheck.group?.members || []).map((m) => String(m._id || m));
+      }
+
+      // Save message to existing database with snapshot recipients
       const savedMessage = await saveAndTrimMessage({
-        groupId,
+        groupId: canonicalGroupId,
+        teamId: linkedTeamId,
         senderId: socket.user._id,
-        text,
+        text: text.trim(),
+        recipientIds: recipientList,
       });
 
-      // Update lastMessage on ChatGroup
-      await ChatGroup.findByIdAndUpdate(groupId, {
-        lastMessage: {
-          text: text.trim().slice(0, 100),
-          senderName: socket.user.name,
-          senderUsername: socket.user.chatUsername || "",
-          createdAt: savedMessage.createdAt || new Date(),
-        },
-      });
+      const idStr = String(targetId);
+      const targetRooms = [idStr, `group:${idStr}`, `team:${idStr}`];
+      if (canonicalGroupId && String(canonicalGroupId) !== idStr) {
+        const cStr = String(canonicalGroupId);
+        targetRooms.push(cStr, `group:${cStr}`, `team:${cStr}`);
+      }
+      if (linkedTeamId && String(linkedTeamId) !== idStr) {
+        const tStr = String(linkedTeamId);
+        targetRooms.push(tStr, `group:${tStr}`, `team:${tStr}`);
+      }
 
-      // Broadcast to all group members in real-time
-      io.to(`group:${groupId}`).emit("new_group_message", {
-        groupId,
+      // Broadcast saved message through WebSocket to all members in that room immediately
+      io.to(targetRooms).emit("receive-message", savedMessage);
+      io.to(targetRooms).emit("receive_message", savedMessage);
+      io.to(targetRooms).emit("new_group_message", {
+        groupId: idStr,
+        chatId: idStr,
         message: savedMessage,
       });
+      io.to(targetRooms).emit("new_message", savedMessage);
+
+      // Background update of lastMessage on ChatGroup
+      const targetGroupForUpdate = canonicalGroupId || (isGroup ? targetId : null);
+      if (targetGroupForUpdate) {
+        ChatGroup.findByIdAndUpdate(targetGroupForUpdate, {
+          lastMessage: {
+            text: text.trim().slice(0, 100),
+            senderName: socket.user.name,
+            senderUsername: socket.user.chatUsername || "",
+            createdAt: savedMessage.createdAt || new Date(),
+          },
+        }).catch((e) => console.warn("[Socket] lastMessage update warning:", e.message));
+      }
 
       if (typeof callback === "function") {
         callback({ success: true, message: savedMessage });
       }
     } catch (err) {
-      console.error("Socket send_group_message error:", err);
+      console.error("Socket send message error:", err);
       if (typeof callback === "function") {
         callback({ error: "Message could not be sent. Please try again." });
       }
     }
+  };
+
+  socket.on("send-message", handleSendMessage);
+  socket.on("send_message", handleSendMessage);
+  socket.on("send_group_message", handleSendMessage);
+
+  // Real-time Chat Delivery Receipt tracking (Point 4)
+  socket.on("message_delivered", async (data) => {
+    try {
+      const { messageId, messageIds } = typeof data === "object" ? data : { messageId: data };
+      const ids = messageIds || (messageId ? [messageId] : []);
+      const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+      if (!validIds.length || !socket.user?._id) return;
+      const now = new Date();
+      const msgs = await Message.find({
+        _id: { $in: validIds },
+        "recipients.userId": socket.user._id,
+        "recipients.delivered": false,
+      });
+      for (const m of msgs) {
+        const r = m.recipients.find((rec) => String(rec.userId) === String(socket.user._id));
+        if (r) {
+          r.delivered = true;
+          r.deliveredAt = now;
+          await m.save();
+          const convId = m.conversationId || String(m.groupId || m.teamId);
+          const updatePayload = {
+            messageId: String(m._id),
+            conversationId: convId,
+            recipientId: String(socket.user._id),
+            status: "delivered",
+            recipients: m.recipients,
+          };
+          const senderIdStr = String(m.senderId?._id || m.senderId);
+          io.to(`user:${senderIdStr}`).emit("receipt_updated", updatePayload);
+          io.to([convId, `group:${convId}`, `team:${convId}`]).emit("receipt_updated", updatePayload);
+        }
+      }
+    } catch (e) {
+      console.warn("[Socket] message_delivered error:", e.message);
+    }
+  });
+
+  // Real-time Chat Read Receipt tracking (Point 4: never turn blue just because sender opened chat)
+  socket.on("conversation_read", async (data) => {
+    try {
+      const { conversationId, messageIds } = typeof data === "object" ? data : { conversationId: data };
+      if (!socket.user?._id) return;
+      const now = new Date();
+      let query = { "recipients.userId": socket.user._id, "recipients.read": false };
+      if (Array.isArray(messageIds) && messageIds.length > 0) {
+        query._id = { $in: messageIds.filter((id) => mongoose.Types.ObjectId.isValid(id)) };
+      } else if (conversationId) {
+        const convStr = String(conversationId);
+        const isOid = mongoose.Types.ObjectId.isValid(convStr);
+        query.$or = [
+          { conversationId: convStr },
+          isOid ? { groupId: convStr } : null,
+          isOid ? { teamId: convStr } : null,
+        ].filter(Boolean);
+      } else {
+        return;
+      }
+      const msgs = await Message.find(query);
+      for (const m of msgs) {
+        const r = m.recipients.find((rec) => String(rec.userId) === String(socket.user._id));
+        if (r) {
+          r.delivered = true;
+          r.deliveredAt = r.deliveredAt || now;
+          r.read = true;
+          r.readAt = now;
+          await m.save();
+          const convId = m.conversationId || String(m.groupId || m.teamId);
+          const updatePayload = {
+            messageId: String(m._id),
+            conversationId: convId,
+            recipientId: String(socket.user._id),
+            status: "read",
+            recipients: m.recipients,
+          };
+          const senderIdStr = String(m.senderId?._id || m.senderId);
+          io.to(`user:${senderIdStr}`).emit("receipt_updated", updatePayload);
+          io.to([convId, `group:${convId}`, `team:${convId}`]).emit("receipt_updated", updatePayload);
+        }
+      }
+    } catch (e) {
+      console.warn("[Socket] conversation_read error:", e.message);
+    }
+  });
+
+  // Handle socket disconnection properly
+  socket.on("disconnect", (reason) => {
+    console.log("User disconnected:", socket.id, "reason:", reason);
   });
 });
 
@@ -439,42 +521,64 @@ apiRouter.get("/bootstrap", optionalAuth, async (req, res) => {
     const isAdmin = req.user && req.user.role === "admin";
     const hackathonQuery = isAdmin ? {} : { isPublished: true };
 
-    const [projects, hackathons, builders, hackathonSquads] = await Promise.all([
+    // Performance optimization: send lean projects for first screen;
+    // Hackathons and builder directories are hydrated on-demand when opened (Waterfal Optimization)
+    const [projects, builders, hackathonSquads] = await Promise.all([
       Project.find()
-        .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
-        .populate("members", "name email avatar profileImage college university role roleTitle github linkedin showEmailToTeam")
+        .populate("createdBy", "name email avatar profileImage college university role roleTitle github linkedin")
+        .populate("members", "name email avatar profileImage college university role roleTitle github linkedin")
         .sort({ createdAt: -1 })
         .lean(),
-      Hackathon.find(hackathonQuery).sort({ createdAt: -1 }).lean(),
-      User.find().select("-password").sort({ createdAt: -1 }).lean(),
-      HackathonTeam.find().populate("createdBy", "name email avatar profileImage").sort({ createdAt: -1 }).lean(),
+      User.find()
+        .select("name avatar role roleTitle college university branch skills")
+        .limit(40)
+        .sort({ createdAt: -1 })
+        .lean(),
+      HackathonTeam.find().populate("createdBy", "name avatar profileImage").sort({ createdAt: -1 }).lean(),
     ]);
 
     const cleanBuilders = (builders || []).map((u) => {
-      if (u.profileImage && u.profileImage.startsWith("data:") && u.profileImage.length > 2000) {
-        return { ...u, profileImage: u.avatar || "" };
+      let avatar = u.avatar || "";
+      if (u.profileImage && !u.profileImage.startsWith("data:") && !avatar) {
+        avatar = u.profileImage;
       }
-      return u;
+      return {
+        ...u,
+        avatar,
+        profileImage: avatar,
+      };
     });
 
     const cleanProjects = (projects || []).map((p) => {
-      const cleanCreatedBy =
-        p.createdBy && p.createdBy.profileImage && p.createdBy.profileImage.startsWith("data:") && p.createdBy.profileImage.length > 2000
-          ? { ...p.createdBy, profileImage: p.createdBy.avatar || "" }
-          : p.createdBy;
-      const cleanMembers = (p.members || []).map((m) =>
-        m && m.profileImage && m.profileImage.startsWith("data:") && m.profileImage.length > 2000
-          ? { ...m, profileImage: m.avatar || "" }
-          : m
-      );
-      return { ...p, createdBy: cleanCreatedBy, members: cleanMembers };
+      let cleanImage = p.image || "";
+      if (cleanImage.startsWith("data:") && cleanImage.length > 2000) {
+        cleanImage = "";
+      }
+      const cleanCreatedBy = p.createdBy
+        ? {
+            ...p.createdBy,
+            avatar: p.createdBy.avatar || (p.createdBy.profileImage && !p.createdBy.profileImage.startsWith("data:") ? p.createdBy.profileImage : ""),
+            profileImage: p.createdBy.avatar || (p.createdBy.profileImage && !p.createdBy.profileImage.startsWith("data:") ? p.createdBy.profileImage : ""),
+          }
+        : p.createdBy;
+      const cleanMembers = (p.members || []).map((m) => {
+        if (!m) return m;
+        const av = m.avatar || (m.profileImage && !m.profileImage.startsWith("data:") ? m.profileImage : "");
+        return { ...m, avatar: av, profileImage: av };
+      });
+      return {
+        ...p,
+        image: cleanImage,
+        createdBy: cleanCreatedBy,
+        members: cleanMembers,
+      };
     });
 
     return res.json({
       success: true,
       data: {
         projects: cleanProjects,
-        hackathons,
+        hackathons: [], // Loaded on-demand when user opens Hackathons
         squadWins: [],
         builders: cleanBuilders,
         hackathonSquads,
@@ -570,7 +674,15 @@ if (!process.env.VERCEL) {
       httpServer.listen(PORT, () => {
         console.log(`server is running on port ${PORT}`);
 
-        // Automated Background Ingestion for Karnataka Hackathons
+        // Automated Background Ingestion for Karnataka Hackathons.
+        // Set DISABLE_HACKATHON_SYNC=true to skip it (e.g. environments
+        // without outbound network access). Chat, auth, and all other
+        // features are unaffected by this flag.
+        if (process.env.DISABLE_HACKATHON_SYNC === "true") {
+          console.log("[Scheduler] Background hackathon sync disabled (DISABLE_HACKATHON_SYNC=true).");
+          return;
+        }
+
         setTimeout(() => {
           console.log("[Scheduler] Initiating automatic startup sync for Karnataka hackathons...");
           runHackathonIngestion().catch((err) => {

@@ -121,22 +121,37 @@ export default function ProjectDetails({
   const totalCapacity = Math.max(1, Number(project.totalCapacity) || 4);
   const confirmedMembers = Array.from(memberMap.values()).slice(0, totalCapacity);
   const currentTeamSize = Math.min(confirmedMembers.length, totalCapacity);
-  const isTeamFull = currentTeamSize >= totalCapacity || project.status === 'full' || project.recruitingBadge === 'Squad Full';
+  // Point 10: Accurate open seats calculation
+  const totalOpenSeats = Math.max(0, totalCapacity - currentTeamSize);
+  const isTeamFull = totalOpenSeats <= 0 || project.status === 'full' || project.recruitingBadge === 'Squad Full' || project.recruitingBadge === 'Team Full';
 
-  // Real open roles from MongoDB
+  // Real open roles from MongoDB, constrained by actual remaining open seats
   const rawVacancies = Array.isArray(project.openVacancies) && project.openVacancies.length > 0
-    ? project.openVacancies
+    ? project.openVacancies.map((r, idx) => {
+        const declared = Number(r.membersCount) || (parseInt(r.seats, 10) || 1);
+        const actualSeats = Math.max(1, Math.min(declared, Math.max(1, totalOpenSeats)));
+        return {
+          ...r,
+          id: r.id || `vac-${idx}`,
+          title: r.title || r.roleName,
+          seats: totalOpenSeats > 0 ? `${actualSeats} ${actualSeats === 1 ? 'seat' : 'seats'} available` : '0 seats available',
+        };
+      })
     : (Array.isArray(project.roles) && project.roles.length > 0)
-      ? project.roles.map((r, idx) => ({
-          id: `role-${idx}`,
-          title: r.roleName,
-          seats: `${r.membersCount || 1} ${Number(r.membersCount) === 1 ? 'seat' : 'seats'} available`,
-        }))
+      ? project.roles.map((r, idx) => {
+          const declared = Number(r.membersCount) || 1;
+          const actualSeats = Math.max(1, Math.min(declared, Math.max(1, totalOpenSeats)));
+          return {
+            id: `role-${idx}`,
+            title: r.roleName,
+            seats: totalOpenSeats > 0 ? `${actualSeats} ${actualSeats === 1 ? 'seat' : 'seats'} available` : '0 seats available',
+          };
+        })
       : (Array.isArray(project.rolesNeeded) && project.rolesNeeded.length > 0)
         ? project.rolesNeeded.map((r, idx) => ({
             id: `role-${idx}`,
             title: r,
-            seats: '1 seat available',
+            seats: totalOpenSeats > 0 ? '1 seat available' : '0 seats available',
           }))
         : [];
 
@@ -322,6 +337,28 @@ export default function ProjectDetails({
                 </p>
               </div>
             )}
+          </div>
+
+          {/* Point 10: Clear Goal, Expected Commitment & Accurate Open Seats Bento */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+            <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high/40">
+              <span className="text-[10px] uppercase font-bold text-outline block">Project Goal</span>
+              <span className="text-xs font-semibold text-on-surface mt-0.5 block truncate">
+                {problemBeingSolved ? problemBeingSolved.slice(0, 90) : 'Collaborate & build prototype'}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high/40">
+              <span className="text-[10px] uppercase font-bold text-outline block">Expected Commitment</span>
+              <span className="text-xs font-semibold text-on-surface mt-0.5 block">
+                {project.expectedCommitment || project.commitment || '5-10 hrs / week'}
+              </span>
+            </div>
+            <div className="p-3 rounded-xl bg-surface-container-low border border-surface-container-high/40">
+              <span className="text-[10px] uppercase font-bold text-outline block">Remaining Open Seats</span>
+              <span className="text-xs font-bold text-secondary mt-0.5 block">
+                {totalOpenSeats > 0 ? `${totalOpenSeats} ${totalOpenSeats === 1 ? 'seat open' : 'seats open'}` : 'Team full'}
+              </span>
+            </div>
           </div>
         </section>
       )}
