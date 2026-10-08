@@ -100,6 +100,20 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // Teammate availability (Add-on 3)
+    isAvailable: {
+      type: Boolean,
+      default: true,
+    },
+    availabilityStatus: {
+      type: String,
+      default: "Available to join teams",
+    },
+    // Muted conversations (Add-on 8)
+    mutedConversations: {
+      type: [String],
+      default: [],
+    },
   },
   {
     timestamps: true,

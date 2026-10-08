@@ -33,6 +33,8 @@ export default function Profile({
   const [graduationYear, setGraduationYear] = useState(currentUser?.graduationYear || '2026');
   const [bio, setBio] = useState(currentUser?.bio || '');
   const [skills, setSkills] = useState(Array.isArray(currentUser?.skills) ? currentUser.skills.join(', ') : '');
+  const [isAvailable, setIsAvailable] = useState(currentUser?.isAvailable !== false);
+  const [availabilityStatus, setAvailabilityStatus] = useState(currentUser?.availabilityStatus || 'Available to join teams');
   const [github, setGithub] = useState(currentUser?.github || '');
   const [linkedin, setLinkedin] = useState(currentUser?.linkedin || '');
   const [showEmailToTeam, setShowEmailToTeam] = useState(currentUser?.showEmailToTeam !== false);
@@ -57,6 +59,8 @@ export default function Profile({
               setGraduationYear(data.graduationYear || '2026');
               setBio(data.bio || '');
               setSkills(Array.isArray(data.skills) ? data.skills.join(', ') : '');
+              setIsAvailable(data.isAvailable !== false);
+              setAvailabilityStatus(data.availabilityStatus || 'Available to join teams');
               setGithub(data.github || '');
               setLinkedin(data.linkedin || '');
               setShowEmailToTeam(data.showEmailToTeam !== false);
@@ -90,6 +94,8 @@ export default function Profile({
         graduationYear: graduationYear.trim(),
         bio: bio.trim(),
         skills: skillsArr,
+        isAvailable: Boolean(isAvailable),
+        availabilityStatus: availabilityStatus.trim() || 'Available to join teams',
         github: github.trim(),
         linkedin: linkedin.trim(),
         showEmailToTeam: Boolean(showEmailToTeam),
@@ -247,6 +253,16 @@ export default function Profile({
                 {activeUser.roleTitle && (
                   <span className="px-2.5 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-label-sm text-label-sm font-semibold">
                     {activeUser.roleTitle}
+                  </span>
+                )}
+                {activeUser.isAvailable !== false ? (
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-label-sm text-[11px] font-semibold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span>{activeUser.availabilityStatus || 'Available to Join'}</span>
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-full bg-surface-container-high text-outline font-label-sm text-[11px] font-semibold">
+                    Not Looking for Teams
                   </span>
                 )}
               </div>
@@ -431,6 +447,41 @@ export default function Profile({
                 placeholder="e.g. React, Node.js, Python, MongoDB"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low text-on-surface font-body-sm text-body-sm outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-secondary/30 transition-all"
               />
+            </div>
+
+            {/* Teammate Availability (Add-on 3) */}
+            <div className="p-4 rounded-xl bg-surface-container-low border border-surface-container-high/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label htmlFor="isAvailableToggle" className="font-title-sm text-sm font-bold text-on-surface cursor-pointer">
+                    Available to join a team
+                  </label>
+                  <p className="font-body-sm text-xs text-outline">
+                    Let squad leaders and project creators discover you for new teams.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="isAvailableToggle"
+                  checked={isAvailable}
+                  onChange={(e) => setIsAvailable(e.target.checked)}
+                  className="w-5 h-5 text-secondary rounded focus:ring-secondary cursor-pointer"
+                />
+              </div>
+              {isAvailable && (
+                <div>
+                  <label className="block text-[11px] font-bold text-outline uppercase mb-1">
+                    Availability Status / Commitment
+                  </label>
+                  <input
+                    type="text"
+                    value={availabilityStatus}
+                    onChange={(e) => setAvailabilityStatus(e.target.value)}
+                    placeholder="e.g. Available 10 hrs/week or Looking for Hackathon squad"
+                    className="w-full px-3.5 py-2 rounded-xl bg-surface-container-lowest text-on-surface font-body-sm text-xs border border-surface-container-high focus:outline-none focus:ring-1 focus:ring-secondary"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Contact Settings (Requirement 12) */}

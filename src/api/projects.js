@@ -40,6 +40,17 @@ export const projectsApi = {
       method: 'PATCH',
     });
   },
+
+  getWorkspace: async (id) => {
+    return await apiClient(`/projects/${id}/workspace`);
+  },
+
+  updateWorkspace: async (id, data) => {
+    return await apiClient(`/projects/${id}/workspace`, {
+      method: 'PUT',
+      body: data,
+    });
+  },
 };
 
 export default projectsApi;

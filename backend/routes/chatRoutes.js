@@ -271,6 +271,7 @@ router.post("/groups/:groupId/messages", authenticateUser, async (req, res) => {
       senderId: req.user._id,
       text,
       recipientIds,
+      replyTo: req.body.replyTo || null,
     });
 
     // Broadcast saved message through WebSocket to all members in that room immediately
@@ -482,6 +483,7 @@ router.post("/:teamId/messages", authenticateUser, async (req, res) => {
       senderId: req.user._id,
       text,
       recipientIds,
+      replyTo: req.body.replyTo || null,
     });
 
     // Broadcast saved message to other team members via Socket.IO
@@ -666,6 +668,197 @@ router.get("/:teamId/details", authenticateUser, async (req, res) => {
   } catch (err) {
     console.error("Get team chat details error:", err);
     return res.status(500).json({ error: "Could not retrieve team details.", details: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ✏️ Edit & Delete Recent Text Messages (Add-on 8)
+// ---------------------------------------------------------------------------
+
+// PUT /api/chat/messages/:messageId - Author edits their own recent text message
+router.put("/messages/:messageId", authenticateUser, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { text } = req.body;
+
+    if (!text || typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ error: "Message text cannot be empty." });
+    }
+    if (text.length > 1000) {
+      return res.status(400).json({ error: "Message cannot exceed 1000 characters." });
+    }
+
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found." });
+    }
+
+    if (String(message.senderId) !== String(req.user._id)) {
+      return res.status(403).json({ error: "You can only edit your own messages." });
+    }
+
+    if (message.isDeleted) {
+      return res.status(400).json({ error: "Deleted messages cannot be edited." });
+    }
+
+    message.text = text.trim();
+    message.isEdited = true;
+    message.editedAt = new Date();
+    await message.save();
+
+    const io = req.app.get("io");
+    if (io) {
+      const convId = message.conversationId || String(message.groupId || message.teamId);
+      const rooms = [convId, `group:${convId}`, `team:${convId}`];
+      io.to(rooms).emit("message_edited", {
+        messageId: String(message._id),
+        conversationId: convId,
+        text: message.text,
+        isEdited: true,
+        editedAt: message.editedAt,
+      });
+    }
+
+    return res.json({ success: true, message });
+  } catch (err) {
+    console.error("Edit message error:", err);
+    return res.status(500).json({ error: "Failed to edit message." });
+  }
+});
+
+// DELETE /api/chat/messages/:messageId - Author deletes their own recent message
+router.delete("/messages/:messageId", authenticateUser, async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const message = await Message.findById(messageId);
+    if (!message) {
+      return res.status(404).json({ error: "Message not found." });
+    }
+
+    if (String(message.senderId) !== String(req.user._id)) {
+      return res.status(403).json({ error: "You can only delete your own messages." });
+    }
+
+    message.text = "This message was deleted";
+    message.isDeleted = true;
+    await message.save();
+
+    const io = req.app.get("io");
+    if (io) {
+      const convId = message.conversationId || String(message.groupId || message.teamId);
+      const rooms = [convId, `group:${convId}`, `team:${convId}`];
+      io.to(rooms).emit("message_deleted", {
+        messageId: String(message._id),
+        conversationId: convId,
+      });
+    }
+
+    return res.json({ success: true, messageId: message._id });
+  } catch (err) {
+    console.error("Delete message error:", err);
+    return res.status(500).json({ error: "Failed to delete message." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 📌 Pin One Important Message (Add-on 6)
+// ---------------------------------------------------------------------------
+
+// POST /api/chat/groups/:groupId/pin - Pin an important message in the group
+router.post("/groups/:groupId/pin", authenticateUser, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { messageId, text, senderName } = req.body;
+
+    const authCheck = await verifyGroupMembership(req.user._id, groupId, req.user.role);
+    if (!authCheck.valid) {
+      return res.status(403).json({ error: authCheck.error });
+    }
+
+    const pinnedMessage = {
+      messageId: messageId || undefined,
+      text: String(text || "").slice(0, 500),
+      senderName: senderName || req.user.name,
+      pinnedBy: req.user.name,
+      pinnedAt: new Date(),
+    };
+
+    const group = await ChatGroup.findByIdAndUpdate(
+      groupId,
+      { pinnedMessage },
+      { new: true }
+    );
+
+    const io = req.app.get("io");
+    if (io) {
+      const gStr = String(groupId);
+      io.to([gStr, `group:${gStr}`]).emit("pinned_message_updated", {
+        groupId: gStr,
+        pinnedMessage,
+      });
+    }
+
+    return res.json({ success: true, pinnedMessage });
+  } catch (err) {
+    console.error("Pin message error:", err);
+    return res.status(500).json({ error: "Failed to pin message." });
+  }
+});
+
+// DELETE /api/chat/groups/:groupId/pin - Unpin message
+router.delete("/groups/:groupId/pin", authenticateUser, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const authCheck = await verifyGroupMembership(req.user._id, groupId, req.user.role);
+    if (!authCheck.valid) {
+      return res.status(403).json({ error: authCheck.error });
+    }
+
+    await ChatGroup.findByIdAndUpdate(groupId, { $unset: { pinnedMessage: 1 } });
+
+    const io = req.app.get("io");
+    if (io) {
+      const gStr = String(groupId);
+      io.to([gStr, `group:${gStr}`]).emit("pinned_message_updated", {
+        groupId: gStr,
+        pinnedMessage: null,
+      });
+    }
+
+    return res.json({ success: true, pinnedMessage: null });
+  } catch (err) {
+    console.error("Unpin message error:", err);
+    return res.status(500).json({ error: "Failed to unpin message." });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 🔕 Mute / Unmute Group (Add-on 8)
+// ---------------------------------------------------------------------------
+
+// POST /api/chat/groups/:groupId/mute - Toggle mute notifications for group
+router.post("/groups/:groupId/mute", authenticateUser, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found." });
+    }
+
+    const currentMuted = user.mutedConversations || [];
+    const isMuted = currentMuted.includes(String(groupId));
+
+    if (isMuted) {
+      user.mutedConversations = currentMuted.filter((id) => id !== String(groupId));
+    } else {
+      user.mutedConversations.push(String(groupId));
+    }
+
+    await user.save();
+    return res.json({ success: true, isMuted: !isMuted, mutedConversations: user.mutedConversations });
+  } catch (err) {
+    console.error("Toggle mute error:", err);
+    return res.status(500).json({ error: "Failed to toggle mute." });
   }
 });
 

@@ -377,4 +377,126 @@ router.patch("/:id/clear-team-full", authenticateUser, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// 📋 Team Workspace: Tasks & Next Milestone (Add-on 2)
+// ---------------------------------------------------------------------------
+
+// GET /api/projects/:id/workspace - Retrieve team tasks and next milestone
+router.get("/:id/workspace", authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid project ID." });
+    }
+
+    const project = await Project.findById(id)
+      .select("title workspace members createdBy")
+      .populate("members", "name avatar profileImage email roleTitle")
+      .populate("createdBy", "name avatar profileImage email roleTitle")
+      .lean();
+
+    if (!project) {
+      return res.status(404).json({ error: "Project not found." });
+    }
+
+    const userIdStr = String(req.user._id);
+    const isOwner = String(project.createdBy?._id || project.createdBy) === userIdStr;
+    const isMember = (project.members || []).some((m) => String(m._id || m) === userIdStr);
+
+    if (!isOwner && !isMember && req.user.role !== "admin") {
+      return res.status(403).json({ error: "Access denied: You are not a member of this team." });
+    }
+
+    const workspace = project.workspace || {
+      nextMilestone: { title: "", dueDate: "", description: "" },
+      tasks: [],
+    };
+
+    return res.json({
+      success: true,
+      projectId: id,
+      title: project.title,
+      workspace,
+      members: [
+        project.createdBy,
+        ...(project.members || []).filter((m) => String(m._id) !== String(project.createdBy?._id)),
+      ].filter(Boolean),
+    });
+  } catch (err) {
+    console.error("Get team workspace error:", err);
+    return res.status(500).json({ error: "Failed to load team workspace." });
+  }
+});
+
+// PUT /api/projects/:id/workspace - Update tasks or next milestone with live broadcast
+router.put("/:id/workspace", authenticateUser, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ error: "Invalid project ID." });
+    }
+
+    const project = await Project.findById(id);
+    if (!project) {
+      return res.status(404).json({ error: "Project not found." });
+    }
+
+    const userIdStr = String(req.user._id);
+    const isOwner = String(project.createdBy) === userIdStr;
+    const isMember = (project.members || []).some((m) => String(m) === userIdStr);
+
+    if (!isOwner && !isMember && req.user.role !== "admin") {
+      return res.status(403).json({ error: "Access denied: You are not a member of this team." });
+    }
+
+    const { nextMilestone, tasks } = req.body;
+
+    if (nextMilestone !== undefined) {
+      project.workspace = project.workspace || {};
+      project.workspace.nextMilestone = {
+        title: String(nextMilestone.title || "").trim(),
+        dueDate: String(nextMilestone.dueDate || "").trim(),
+        description: String(nextMilestone.description || "").trim(),
+      };
+    }
+
+    if (Array.isArray(tasks)) {
+      project.workspace = project.workspace || {};
+      project.workspace.tasks = tasks.map((t) => ({
+        _id: t._id ? t._id : new mongoose.Types.ObjectId(),
+        title: String(t.title || "").trim(),
+        completed: Boolean(t.completed),
+        assignedTo: t.assignedTo && mongoose.Types.ObjectId.isValid(t.assignedTo) ? t.assignedTo : null,
+        assignedName: String(t.assignedName || "Unassigned"),
+        createdAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+      }));
+    }
+
+    await project.save();
+
+    // Broadcast real-time update to all team members currently viewing this team
+    const io = req.app.get("io");
+    if (io) {
+      const room = String(id);
+      io.to([room, `group:${room}`, `team:${room}`]).emit("team_workspace_updated", {
+        projectId: room,
+        workspace: project.workspace,
+        updatedBy: {
+          _id: req.user._id,
+          name: req.user.name,
+        },
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Team workspace updated successfully.",
+      workspace: project.workspace,
+    });
+  } catch (err) {
+    console.error("Update team workspace error:", err);
+    return res.status(500).json({ error: "Failed to update team workspace." });
+  }
+});
+
 export default router;

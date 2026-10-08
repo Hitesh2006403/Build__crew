@@ -290,6 +290,7 @@ io.on("connection", (socket) => {
         senderId: socket.user._id,
         text: text.trim(),
         recipientIds: recipientList,
+        replyTo: data?.replyTo || null,
       });
 
       const idStr = String(targetId);
@@ -422,6 +423,31 @@ io.on("connection", (socket) => {
       }
     } catch (e) {
       console.warn("[Socket] conversation_read error:", e.message);
+    }
+  });
+
+  // Real-time Typing Indicators (Add-on 7)
+  socket.on("typing", (data) => {
+    const targetId = typeof data === "object" ? (data?.chatId || data?.groupId || data?.teamId) : data;
+    if (targetId && socket.user) {
+      const idStr = String(targetId);
+      socket.to([idStr, `group:${idStr}`, `team:${idStr}`]).emit("user_typing", {
+        chatId: idStr,
+        userId: String(socket.user._id),
+        name: socket.user.name,
+        chatUsername: socket.user.chatUsername || "",
+      });
+    }
+  });
+
+  socket.on("stop_typing", (data) => {
+    const targetId = typeof data === "object" ? (data?.chatId || data?.groupId || data?.teamId) : data;
+    if (targetId && socket.user) {
+      const idStr = String(targetId);
+      socket.to([idStr, `group:${idStr}`, `team:${idStr}`]).emit("user_stopped_typing", {
+        chatId: idStr,
+        userId: String(socket.user._id),
+      });
     }
   });
 

@@ -28,6 +28,7 @@ export default function FindBuilders({
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
+  const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [selectedBuilderForInvite, setSelectedBuilderForInvite] = useState(null);
   const [selectedSquadTarget, setSelectedSquadTarget] = useState('');
   const [inviteRole, setInviteRole] = useState('Core Contributor');
@@ -139,32 +140,61 @@ function cleanText(text) {
     }
   };
 
-  const filteredBuilders = builders.filter(b => {
-    // Hide current logged in user from teammates discovery if desired, or allow viewing profile
-    const bName = b.name || '';
-    const bCollege = b.college || b.university || '';
-    const bBranch = b.branch || b.major || '';
-    const bRole = b.roleTitle || b.role || '';
-    const bSkills = Array.isArray(b.skills) ? b.skills : [];
+  // Extract skills needed across projects posted by current user (Add-on 3)
+  const myProjectsSkillsNeeded = React.useMemo(() => {
+    if (!currentUser) return new Set();
+    const set = new Set();
+    (projects || [])
+      .filter((p) => String(p.createdBy?._id || p.createdBy) === String(currentUser._id))
+      .forEach((p) => {
+        (p.rolesNeeded || []).forEach((r) => set.add(r.toLowerCase()));
+        (p.techStack || []).forEach((t) => set.add(t.toLowerCase()));
+        (p.roles || []).forEach((r) => set.add(String(r.roleName || '').toLowerCase()));
+      });
+    return set;
+  }, [projects, currentUser]);
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      const match = bName.toLowerCase().includes(q) ||
-                    bCollege.toLowerCase().includes(q) ||
-                    bBranch.toLowerCase().includes(q) ||
-                    bSkills.some(s => s.toLowerCase().includes(q));
-      if (!match) return false;
-    }
+  const filteredBuilders = React.useMemo(() => {
+    return builders.filter(b => {
+      const bName = b.name || '';
+      const bCollege = b.college || b.university || '';
+      const bBranch = b.branch || b.major || '';
+      const bRole = b.roleTitle || b.role || '';
+      const bSkills = Array.isArray(b.skills) ? b.skills : [];
 
-    if (selectedRole !== 'all') {
-      const targetRole = selectedRole.toLowerCase();
-      const matchesRole = bRole.toLowerCase().includes(targetRole) ||
-                          bSkills.some(s => s.toLowerCase().includes(targetRole));
-      if (!matchesRole) return false;
-    }
+      if (onlyAvailable && b.isAvailable === false) {
+        return false;
+      }
 
-    return true;
-  });
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const match = bName.toLowerCase().includes(q) ||
+                      bCollege.toLowerCase().includes(q) ||
+                      bBranch.toLowerCase().includes(q) ||
+                      bSkills.some(s => s.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+
+      if (selectedRole !== 'all') {
+        const targetRole = selectedRole.toLowerCase();
+        const matchesRole = bRole.toLowerCase().includes(targetRole) ||
+                            bSkills.some(s => s.toLowerCase().includes(targetRole));
+        if (!matchesRole) return false;
+      }
+
+      return true;
+    }).sort((a, b) => {
+      // Suggest teammates matching user's open project roles first
+      const aSkills = Array.isArray(a.skills) ? a.skills : [];
+      const bSkills = Array.isArray(b.skills) ? b.skills : [];
+      const aMatch = aSkills.filter(s => myProjectsSkillsNeeded.has(s.toLowerCase())).length;
+      const bMatch = bSkills.filter(s => myProjectsSkillsNeeded.has(s.toLowerCase())).length;
+      if (aMatch !== bMatch) return bMatch - aMatch;
+      const aAvail = a.isAvailable !== false ? 1 : 0;
+      const bAvail = b.isAvailable !== false ? 1 : 0;
+      return bAvail - aAvail;
+    });
+  }, [builders, onlyAvailable, search, selectedRole, myProjectsSkillsNeeded]);
 
   return (
     <div className="flex flex-col w-full pb-space-xl space-y-space-lg">
@@ -221,12 +251,22 @@ function cleanText(text) {
         <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
           <button
             type="button"
-            onClick={() => setSelectedRole('all')}
+            onClick={() => { setSelectedRole('all'); setOnlyAvailable(false); }}
             className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap ${
-              selectedRole === 'all' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
+              selectedRole === 'all' && !onlyAvailable ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'
             }`}
           >
             All Students
+          </button>
+          <button
+            type="button"
+            onClick={() => setOnlyAvailable(!onlyAvailable)}
+            className={`px-3.5 py-1.5 rounded-full font-label-md text-label-md transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+              onlyAvailable ? 'bg-emerald-600 text-white font-bold shadow-xs' : 'bg-surface-container-high text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${onlyAvailable ? 'bg-white' : 'bg-emerald-500'}`} />
+            <span>Available to Join</span>
           </button>
           <button
             type="button"
@@ -305,13 +345,26 @@ function cleanText(text) {
             const semesterText = isSemesterSet ? `Semester ${b.semester}` : (b.year ? `Class of ${b.year}` : '');
             const hasSkills = Array.isArray(b.skills) && b.skills.length > 0;
             const displayName = formatTeammateName(b);
+            const bSkills = Array.isArray(b.skills) ? b.skills : [];
+            const matchingSkills = bSkills.filter(s => myProjectsSkillsNeeded.has(s.toLowerCase()));
+            const isSuggested = matchingSkills.length > 0 && b.isAvailable !== false;
 
             return (
               <div
                 key={b._id || b.id}
-                className="bg-surface-container-lowest rounded-2xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 border border-surface-container-high/40"
+                className={`bg-surface-container-lowest rounded-2xl p-space-md shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 border ${
+                  isSuggested && !isSelf ? 'border-secondary/50 ring-1 ring-secondary/20' : 'border-surface-container-high/40'
+                }`}
               >
                 <div className="space-y-3">
+                  {/* Suggested Match Banner (Add-on 3) */}
+                  {isSuggested && !isSelf && (
+                    <div className="px-3 py-1.5 rounded-xl bg-secondary/10 border border-secondary/20 text-secondary text-[11px] font-bold flex items-center gap-1.5 shadow-2xs">
+                      <span className="material-symbols-outlined text-sm">stars</span>
+                      <span>Suggested Match ({matchingSkills.slice(0, 2).join(', ')})</span>
+                    </div>
+                  )}
+
                   {/* Top user header */}
                   <div className="flex items-start gap-space-sm">
                     <div className="relative shrink-0">
@@ -361,12 +414,19 @@ function cleanText(text) {
                           {semesterText}
                         </div>
                       )}
-                      {b.availability && (
-                        <div className="text-[10px] text-secondary font-semibold mt-0.5 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-xs">schedule</span>
-                          <span>{b.availability}</span>
-                        </div>
-                      )}
+                      {/* Teammate Availability Badge (Add-on 3) */}
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        {b.isAvailable !== false ? (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-label-sm text-[10px] font-bold flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            <span>{b.availabilityStatus || 'Available to Join'}</span>
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-surface-container text-outline font-label-sm text-[10px]">
+                            Not Looking
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 

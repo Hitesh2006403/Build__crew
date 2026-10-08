@@ -55,6 +55,14 @@ const chatGroupSchema = new mongoose.Schema(
       senderUsername: { type: String, default: "" },
       createdAt: { type: Date, default: Date.now },
     },
+    // Single pinned message per group (Add-on 6)
+    pinnedMessage: {
+      messageId: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
+      text: { type: String, default: "" },
+      senderName: { type: String, default: "" },
+      pinnedBy: { type: String, default: "" },
+      pinnedAt: { type: Date },
+    },
   },
   {
     timestamps: true,

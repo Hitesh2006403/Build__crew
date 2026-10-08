@@ -31,11 +31,12 @@ export const chatApi = {
    * Sends text-only message to a group
    * @param {string} groupId
    * @param {string} text
+   * @param {object} [replyTo]
    */
-  sendGroupMessage: async (groupId, text) => {
+  sendGroupMessage: async (groupId, text, replyTo = null) => {
     return await apiClient(`/chat/groups/${groupId}/messages`, {
       method: 'POST',
-      body: { text },
+      body: { text, replyTo },
     });
   },
 
@@ -93,11 +94,12 @@ export const chatApi = {
    * REST fallback for sending text message to team
    * @param {string} teamId
    * @param {string} text
+   * @param {object} [replyTo]
    */
-  sendMessage: async (teamId, text) => {
+  sendMessage: async (teamId, text, replyTo = null) => {
     return await apiClient(`/chat/${teamId}/messages`, {
       method: 'POST',
-      body: { text },
+      body: { text, replyTo },
     });
   },
 
@@ -129,6 +131,60 @@ export const chatApi = {
     return await apiClient('/chat/receipts/read', {
       method: 'POST',
       body: { conversationId, messageIds },
+    });
+  },
+
+  /**
+   * Edits an existing text message (Add-on 8)
+   * @param {string} messageId
+   * @param {string} text
+   */
+  editMessage: async (messageId, text) => {
+    return await apiClient(`/chat/messages/${messageId}`, {
+      method: 'PUT',
+      body: { text },
+    });
+  },
+
+  /**
+   * Deletes an existing text message (Add-on 8)
+   * @param {string} messageId
+   */
+  deleteMessage: async (messageId) => {
+    return await apiClient(`/chat/messages/${messageId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
+   * Pins an important message in the group (Add-on 6)
+   * @param {string} groupId
+   * @param {{ messageId?: string, text: string, senderName?: string }} data
+   */
+  pinMessage: async (groupId, data) => {
+    return await apiClient(`/chat/groups/${groupId}/pin`, {
+      method: 'POST',
+      body: data,
+    });
+  },
+
+  /**
+   * Unpins the message in the group (Add-on 6)
+   * @param {string} groupId
+   */
+  unpinMessage: async (groupId) => {
+    return await apiClient(`/chat/groups/${groupId}/pin`, {
+      method: 'DELETE',
+    });
+  },
+
+  /**
+   * Toggles notification mute for a group (Add-on 8)
+   * @param {string} groupId
+   */
+  toggleMuteGroup: async (groupId) => {
+    return await apiClient(`/chat/groups/${groupId}/mute`, {
+      method: 'POST',
     });
   },
 };

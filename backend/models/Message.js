@@ -30,6 +30,34 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Reply feature (Add-on 5)
+    replyTo: {
+      messageId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Message",
+      },
+      senderName: {
+        type: String,
+        default: "",
+      },
+      text: {
+        type: String,
+        default: "",
+        maxlength: 300,
+      },
+    },
+    // Edit & Delete feature (Add-on 8)
+    isEdited: {
+      type: Boolean,
+      default: false,
+    },
+    editedAt: {
+      type: Date,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
     // Per-recipient delivery & read receipts tracking (Point 4)
     recipients: [
       {
@@ -76,7 +104,7 @@ messageSchema.index({ "recipients.userId": 1 });
  * Saves a new message and enforces the maximum 500 messages per conversation limit.
  * Populates snapshot recipients at send time (Point 4).
  */
-export async function saveAndTrimMessage({ teamId, groupId, senderId, text, recipientIds = [] }) {
+export async function saveAndTrimMessage({ teamId, groupId, senderId, text, recipientIds = [], replyTo = null }) {
   if (!text || typeof text !== "string") {
     throw new Error("Message text is required.");
   }
@@ -164,6 +192,11 @@ export async function saveAndTrimMessage({ teamId, groupId, senderId, text, reci
     text: trimmedText,
     read: false,
     recipients: recipientsList,
+    replyTo: replyTo && replyTo.text ? {
+      messageId: replyTo.messageId || undefined,
+      senderName: replyTo.senderName || "",
+      text: String(replyTo.text).slice(0, 300),
+    } : undefined,
   });
 
   // 2. Enforce 500-message ceiling per conversation without blocking the response.
